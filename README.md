@@ -55,7 +55,7 @@ The dataset containd the following informations:
   * **2022**: [coil data](https://opendata.comune.bologna.it/api/explore/v2.1/catalog/datasets/rilevazione-flusso-veicoli-tramite-spire-anno-2022/exports/csv?lang=it&timezone=Europe%2FRome&use_labels=true&delimiter=%3B) / [coil accuracy](https://opendata.comune.bologna.it/api/explore/v2.1/catalog/datasets/accuratezza-spire-anno-2022/exports/csv?lang=it&timezone=Europe%2FRome&use_labels=true&delimiter=%3B)
   * **2023**: [coil data](https://opendata.comune.bologna.it/api/explore/v2.1/catalog/datasets/rilevazione-flusso-veicoli-tramite-spire-anno-2023/exports/csv?lang=it&timezone=Europe%2FRome&use_labels=true&delimiter=%3B) / [coil accuracy](https://opendata.comune.bologna.it/api/explore/v2.1/catalog/datasets/accuratezza-spire-anno-2023/exports/csv?lang=it&timezone=Europe%2FRome&use_labels=true&delimiter=%3B)
   * **2024**: [coil data](https://opendata.comune.bologna.it/api/explore/v2.1/catalog/datasets/rilevazione-flusso-veicoli-tramite-spire-anno-2024/exports/csv?lang=it&timezone=Europe%2FRome&use_labels=true&delimiter=%3B) / [coil accuracy](https://opendata.comune.bologna.it/api/explore/v2.1/catalog/datasets/accuratezza-spire-anno-2024/exports/csv?lang=it&timezone=Europe%2FRome&use_labels=true&delimiter=%3B)
-* **Weather** (`zip` files. We will only use the `01421_year_h.csv` file, containing hourly data)**:**
+* **Weather** (`zip` files. We will only use the `01421_{year}_h.csv` file, containing hourly data)**:**
 
   * [2019](https://dati-simc.arpae.it/opendata/erg5v2/timeseries/01421/01421_2019.zip)
   * [2020](https://dati-simc.arpae.it/opendata/erg5v2/timeseries/01421/01421_2020.zip)

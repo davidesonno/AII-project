@@ -15,3 +15,74 @@ def merge_csv_to_dataframe(input_folder, **kwargs):
     print(f"Merged {len(csv_files)} CSV files")
     
     return merged_df
+
+
+def plot_time_series(dfs, value_column, date_column, legends, start_date=None, end_date=None, max_rows=5000, downsample_factor=8, title=''):
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(40, 6))
+
+    for df, legend in zip(dfs, legends):
+        if start_date and end_date:
+            df = df[(df[date_column] >= start_date) & (df[date_column] < end_date)]
+        
+        df = df.sort_values(date_column)
+
+        if len(df) > max_rows:
+            df = df.iloc[::downsample_factor]  
+
+        plt.plot(df[date_column], df[value_column], label=legend, linewidth=1)
+
+    plt.xlabel('Date')
+    plt.ylabel('Value')
+    plt.title(f'Time Series of {title}')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+def plot_time_series_per_station(df, value_column, date_column, station_column, start_date=None, end_date=None, max_rows=5000, downsample_factor=8, title='Air Pollution Time Series'):
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(25, 6))
+
+    # Apply date filtering if needed
+    if start_date and end_date:
+        df = df[(df[date_column] >= start_date) & (df[date_column] < end_date)]
+    
+    df = df.sort_values(date_column)
+
+    # Loop through unique station codes and plot each
+    for station in df[station_column].unique():
+        station_df = df[df[station_column] == station]
+        
+        if len(station_df) > max_rows:
+            station_df = station_df.iloc[::downsample_factor]  # Downsampling
+
+        plt.plot(station_df[date_column], station_df[value_column], label=f'Station {station}', linewidth=1, alpha=1)
+
+    plt.xlabel('Date')
+    plt.ylabel('Value')
+    plt.title(title)
+    plt.legend(title='Stations', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+
+from datetime import datetime
+
+def map_date_to_idx(df, column_name, start_date:datetime):
+    '''
+	convert the date to an index, starting from `start_date` and increasing by 1 each hour
+    TODO: not sure if it works correctly
+    '''
+    import pandas as pd
+    # Ensure the column is in datetime format
+    df[column_name] = pd.to_datetime(df[column_name])
+
+    # Compute the index based on the difference in hours
+    df['date_index'] = ((df[column_name] - start_date).dt.total_seconds() // 3600).astype(int)
+
+    return df
+
+ 
