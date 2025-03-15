@@ -85,4 +85,32 @@ def map_date_to_idx(df, column_name, start_date:datetime):
 
     return df
 
- 
+def convert_percentage_to_number(df):
+    for col in df.columns:
+        first_value = df[col].dropna().astype(str).iloc[0]  # Get the first non-null value as a string
+        if first_value.endswith('%'):  # Check if it looks like a percentage
+            df[col] = df[col].str.rstrip('%').astype(float) / 100
+    return df
+
+import pandas as pd
+
+def apply_accuracy_df(readings_df, accuracies_df, acc_verified_col=True):
+    # Merge with a left join to keep all readings
+    merged_df = readings_df.merge(accuracies_df, on=['data', 'codice spira'], 
+                                  suffixes=('_reading', '_accuracy'), how='left')
+
+    if acc_verified_col:
+        # Create 'accurate' column based on missing accuracy
+        merged_df['accurate'] = merged_df.iloc[:, 2 + len(readings_df.columns[2:]) :].notna().all(axis=1)
+
+    # Multiply only where accuracy is available, keeping original value if missing
+    for col in readings_df.columns[2:]:  # Skip 'data' and 'codice spira'
+        merged_df[col + '_final'] = merged_df[col + '_reading'] * merged_df[col + '_accuracy'].fillna(1)
+
+    # Keep only necessary columns
+    cols = ['data', 'codice spira', 'accurate'] if acc_verified_col else ['data', 'codice spira']
+    final_df = merged_df[cols + [col + '_final' for col in readings_df.columns[2:]]]
+    final_df.columns = cols + list(readings_df.columns[2:])  # Rename columns back
+
+    return final_df
+
