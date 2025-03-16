@@ -1,6 +1,10 @@
+from datetime import datetime
+import matplotlib.pyplot as plt
+import pandas as pd
+import os
+import numpy as np
+
 def merge_csv_to_dataframe(input_folder, **kwargs):
-    import pandas as pd
-    import os
     
     """Merge all CSV files in a folder into a single pandas DataFrame."""
     csv_files = [f for f in os.listdir(input_folder) if f.endswith('.csv')]
@@ -18,7 +22,6 @@ def merge_csv_to_dataframe(input_folder, **kwargs):
 
 
 def plot_time_series(dfs, value_column, date_column, legends, start_date=None, end_date=None, max_rows=5000, downsample_factor=8, title=''):
-    import matplotlib.pyplot as plt
     plt.figure(figsize=(40, 6))
 
     for df, legend in zip(dfs, legends):
@@ -41,7 +44,6 @@ def plot_time_series(dfs, value_column, date_column, legends, start_date=None, e
 
 
 def plot_time_series_per_station(df, value_column, date_column, station_column, start_date=None, end_date=None, max_rows=5000, downsample_factor=8, title='Air Pollution Time Series'):
-    import matplotlib.pyplot as plt
     plt.figure(figsize=(25, 6))
 
     # Apply date filtering if needed
@@ -69,14 +71,12 @@ def plot_time_series_per_station(df, value_column, date_column, station_column, 
     plt.show()
 
 
-from datetime import datetime
 
 def map_date_to_idx(df, column_name, start_date:datetime):
     '''
 	convert the date to an index, starting from `start_date` and increasing by 1 each hour
     TODO: not sure if it works correctly
     '''
-    import pandas as pd
     # Ensure the column is in datetime format
     df[column_name] = pd.to_datetime(df[column_name])
 
@@ -92,7 +92,6 @@ def convert_percentage_to_number(df):
             df[col] = df[col].str.rstrip('%').astype(float) / 100
     return df
 
-import pandas as pd
 
 def apply_accuracy_df(readings_df, accuracies_df, acc_verified_col=True):
     # Merge with a left join to keep all readings
@@ -114,3 +113,36 @@ def apply_accuracy_df(readings_df, accuracies_df, acc_verified_col=True):
 
     return final_df
 
+def resample_df_on_column(df, agents_dict, column='Date', ):
+    resampled_dfs = []
+    for agent in agents_dict.keys():
+        print(f'Resampling {agent} on {agents_dict[agent]}')
+        mask = df['Agent'] == agent
+        resampled = (
+            df[mask]
+            .resample(agents_dict[agent], on=column)
+            .max()  
+            .reset_index()
+        )
+        resampled['Agent'] = agent 
+        resampled_dfs.append(resampled)
+    res = pd.concat(resampled_dfs)
+    res['Station'] = res['Station'].fillna(df.iloc[0]['Station'])
+    res['Unit'] = res['Unit'].fillna(df.iloc[0]['Unit'])
+    return res
+
+
+def fill_missing_dates_for_agent(df, mode='ffill'):
+    match mode: 
+        case 'ffill':
+            return df.ffill()
+        case 'bfill':
+            return df.bfill()
+        case _:
+            raise ValueError(f'Invalid mode: {mode}')
+
+def fill_missing_dates(df, mode='ffill'):
+    for agent in np.unique(df['Agent']):
+        mask = df['Agent'] == agent
+        df[mask] = fill_missing_dates_for_agent(df[mask], mode)
+    return df
