@@ -93,22 +93,23 @@ def convert_percentage_to_number(df):
     return df
 
 
-def apply_accuracy_df(readings_df, accuracies_df, acc_verified_col=True):
-    # Merge with a left join to keep all readings
-    merged_df = readings_df.merge(accuracies_df, on=['data', 'codice spira'], 
-                                  suffixes=('_reading', '_accuracy'), how='left')
+def apply_accuracy_df(readings_df, accuracies_df, add_verified_col=False, max_multiplier=100, half_multiplier=2):
 
-    if acc_verified_col:
-        # Create 'accurate' column based on missing accuracy
+    def accuracy_coeff(accuracies:pd.Series, max, half):
+        return accuracies.where(accuracies == 0, 1 / accuracies)
+
+    merged_df = readings_df.merge(accuracies_df, on=['data', 'codice spira'], 
+                                  suffixes=('_reading', '_accuracy'), how='left').fillna(1)
+
+    if add_verified_col:
         merged_df['accurate'] = merged_df.iloc[:, 2 + len(readings_df.columns[2:]) :].notna().all(axis=1)
 
     # Multiply only where accuracy is available, keeping original value if missing
     for col in readings_df.columns[2:]:  # Skip 'data' and 'codice spira'
-        merged_df[col + '_final'] = merged_df[col + '_reading'] * merged_df[col + '_accuracy'].fillna(1)
+        merged_df[col + '_reading'] = (merged_df[col + '_reading']  * accuracy_coeff(merged_df[col + '_accuracy'], max_multiplier, half_multiplier)).astype(int)
 
-    # Keep only necessary columns
-    cols = ['data', 'codice spira', 'accurate'] if acc_verified_col else ['data', 'codice spira']
-    final_df = merged_df[cols + [col + '_final' for col in readings_df.columns[2:]]]
+    cols = ['data', 'codice spira', 'accurate'] if add_verified_col else ['data', 'codice spira']
+    final_df = merged_df[cols + [col + '_reading' for col in readings_df.columns[2:]]]
     final_df.columns = cols + list(readings_df.columns[2:])  # Rename columns back
 
     return final_df
@@ -132,17 +133,32 @@ def resample_df_on_column(df, agents_dict, column='Date', ):
     return res
 
 
-def fill_missing_dates_for_agent(df, mode='ffill'):
-    match mode: 
-        case 'ffill':
-            return df.ffill()
-        case 'bfill':
-            return df.bfill()
-        case _:
-            raise ValueError(f'Invalid mode: {mode}')
+def fill_missing_dates_for_agent(df: pd.DataFrame, method: str):
+    if method == 'mfill':
+        return df.fillna(df['Value'].mean())
+    
+    elif hasattr(df, method):  
+        return getattr(df, method)()
+    
+    else:
+        raise ValueError(f"Invalid method: {method}")
+    
+def fill_missing_dates(df, mode):
+    '''
+    Specify the `method` to use to fill `Nan` values.
 
-def fill_missing_dates(df, mode='ffill'):
+    Usually `method` is one of ['ffill', 'bfill', 'interpolate', 'mfill']
+    '''
     for agent in np.unique(df['Agent']):
         mask = df['Agent'] == agent
         df[mask] = fill_missing_dates_for_agent(df[mask], mode)
     return df
+
+def df_to_agents_dict(df, column='Agent'):
+    agents_dict = {}
+
+    for agent in np.unique(df[column]):
+        agents_dict[agent] = df[df[column] == agent].sort_values(by='Date')
+    
+    return agents_dict
+
