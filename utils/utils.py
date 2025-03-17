@@ -162,3 +162,89 @@ def df_to_agents_dict(df, column='Agent'):
     
     return agents_dict
 
+
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371  # Earth's radius in km
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])  # Convert to radians
+    
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    
+    return R * c  # Distance in km
+
+def search_close_readings(df, center, radius):
+    center_lat, center_lon = map(float, center.split(','))
+    
+    # Extract lat/lon values from 'geopoint' column
+    lat_lon = np.array([list(map(float, gp.split(','))) for gp in df['geopoint']])
+    
+    # Compute all distances using Haversine formula (vectorized)
+    distances = haversine(center_lat, center_lon, lat_lon[:, 0], lat_lon[:, 1])
+    
+    # Return filtered DataFrame
+    return df[distances <= radius]
+
+def divide_df_by_location(df, geopoint, radius):
+    close_df = search_close_readings(df, geopoint, radius)
+    close_df=close_df.drop(columns=['geopoint', 'codice spira'])
+    df_melted = close_df.melt(id_vars=["data"], var_name="Hour", value_name="Value")
+    df_melted['Hour'] = df_melted['Hour'].apply(lambda x: x.split('-')[0])
+    df_melted['data'] = pd.to_datetime(df_melted['data'] + ' ' + df_melted['Hour'])
+    
+    df_melted = df_melted.rename(columns={'data': 'Date'}
+                                ).drop(columns=['Hour']
+                                ).groupby('Date', as_index=False)['Value'].sum(
+                                ).resample('1h', on='Date'
+                                ).mean(
+                                ).reset_index(
+                                ).ffill()
+    return df_melted
+
+def preprocess_traffic_dataset(df, accuracies_df, radius=1):
+    def map_values(x):
+        if x == -0.01:
+            return 0
+        return x
+    
+    df = df.drop(columns=[
+    'id_uni',
+    'Livello',
+    'tipologia',
+    'codice',
+    'codice arco',
+    'codice via',
+    'Nome via',
+    'Nodo da',
+    'Nodo a',
+    'ordinanza',
+    'stato',
+    'codimpsem',
+    'direzione',
+    'angolo',
+    'longitudine',
+    'latitudine',
+    'ID_univoco_stazione_spira',
+    'Giorno della settimana',
+    'giorno settimana'
+    ])
+    df = df.dropna()
+    accuracies_df = convert_percentage_to_number(accuracies_df)
+    accuracies_df = accuracies_df.map(map_values)
+    common_cols = df.columns.intersection(accuracies_df.columns).tolist()
+
+    accurate_traffic_df = apply_accuracy_df(df[common_cols],accuracies_df[common_cols],max_multiplier=15, half_multiplier=2).reset_index(drop=True)
+    df = df.reset_index(drop=True)
+    for col in list(set(df.columns) - set(common_cols)): # add back readings columns
+        accurate_traffic_df[col] = df[col]
+        
+    giardini_margherita_geopoint = '44.482671138769533,11.35406170088398'
+    san_felice_geopoint = '44.499059983334519,11.327526717440112'
+    chiarini_geopoint = '44.499134335170289, 11.285089594971216'
+    
+    giardini_df = divide_df_by_location(accurate_traffic_df, giardini_margherita_geopoint, radius)
+    san_felice_df = divide_df_by_location(accurate_traffic_df, san_felice_geopoint, radius)
+    chiarini_df = divide_df_by_location(accurate_traffic_df, chiarini_geopoint, radius)
+    return giardini_df, san_felice_df, chiarini_df
