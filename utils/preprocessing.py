@@ -1,0 +1,122 @@
+from utils import *
+
+
+def prepare_dataset(datasets_folder, dataset, v=1):
+    '''
+	`v=0` stops any output prints.
+    '''
+    match dataset:
+        case 'pollution':
+            return preprocess_pollution_dataset(os.path.join(datasets_folder,'pollution/pollution.csv'), v=v)
+            
+        case 'traffic':
+            return preprocess_traffic_dataset(os.path.join(datasets_folder,'traffic'), v=v)
+
+        case 'weather':
+            return preprocess_weather_dataset(os.path.join(datasets_folder,'weather'), v=v)
+        
+        case _:
+            return None
+
+# === POLLUTION ===
+def preprocess_pollution_dataset(csv_path, v=1):
+    '''
+	returns a list of dict, one for each station.
+
+    each dict has a dataframe for each agent key value.
+    '''
+    df = pd.read_csv(csv_path, sep=';')
+    df.rename(columns={
+        'COD_STAZ': 'Station', 
+        'AGENTE': 'Agent', 
+        'DATA_INIZIO': 'Date', 
+        'DATA_FINE': 'Ending_date', 
+        'VALORE': 'Value', 
+        'UM': 'Unit'
+    }, inplace=True)
+    df.drop(columns=['Ending_date','Unit'], inplace=True)
+    df=df.sort_values(by='Date')
+    df['Date'] = pd.to_datetime(df['Date'].apply(lambda x: ' '.join(x.split('T')).split('+')[0]))
+    df['Agent'] = df['Agent'].apply(lambda x: x.split(' ')[0])
+    # split by station
+    stations = np.unique(df['Station'])
+    if v>0: print('Stations found: ', end='')
+    if v>0: print(*stations, sep=', ')
+    stations_dfs = [df[df['Station'] == station] for station in stations]
+    # resample
+    agents_dict = {
+        'PM10': '24h',
+        'PM2.5': '24h',
+        'CO': '1h',
+        'NO': '1h',
+        'NO2': '1h',
+        'NOX': '1h',
+        'O3': '1h',
+        'C6H6': '1h'
+    }
+
+    resampled_dfs = [resample_df_on_column(station_df, agents_dict, v=v) for station_df in stations_dfs]
+    filled_dfs = [fill_missing_dates_on_column_value(resampled_df, column='Agent', column_to_fill='Value', mode='mfill', v=v) for resampled_df in resampled_dfs]
+
+    return [df_to_agents_dict(filled_df, v=v) for filled_df in filled_dfs]
+
+# === TRAFFIC ===
+def preprocess_traffic_dataset(traffic_folder, locations = None, radius=1, v=1):
+    def map_values(x):
+        if x == -0.01:
+            return 0
+        return x
+    
+    if locations is None:
+        locations = [
+            '44.482671138769533,11.35406170088398', # giardini margherita
+            '44.499059983334519,11.327526717440112', # san felice
+            '44.499134335170289, 11.285089594971216' # chiarini
+        ]
+
+    if v>0: print('Merging readings files...')
+    df = merge_csv_to_dataframe(os.path.join(traffic_folder, 'readings'), sep=';')
+    if v>0: print('Merging accuracies files...')
+    accuracies_df = merge_csv_to_dataframe(os.path.join(traffic_folder, 'accuracies'), sep=';')
+
+    df = df.drop(columns=[
+    'id_uni',
+    'Livello',
+    'tipologia',
+    'codice',
+    'codice arco',
+    'codice via',
+    'Nome via',
+    'Nodo da',
+    'Nodo a',
+    'ordinanza',
+    'stato',
+    'codimpsem',
+    'direzione',
+    'angolo',
+    'longitudine',
+    'latitudine',
+    'ID_univoco_stazione_spira',
+    'Giorno della settimana',
+    'giorno settimana'
+    ])
+    df = df.dropna()
+    accuracies_df = convert_percentage_to_number(accuracies_df)
+    accuracies_df = accuracies_df.map(map_values)
+    common_cols = df.columns.intersection(accuracies_df.columns).tolist()
+
+    accurate_traffic_df = apply_accuracy_df(df[common_cols],accuracies_df[common_cols],max_multiplier=15, half_multiplier=2).reset_index(drop=True)
+    df = df.reset_index(drop=True)
+    for col in list(set(df.columns) - set(common_cols)): # add back readings columns
+        accurate_traffic_df[col] = df[col]
+        
+    dfs=[divide_df_by_location(accurate_traffic_df, center, radius, v=v) for center in locations]
+    
+    return dfs
+
+# === WEATHER ===
+def preprocess_weather_dataset(weather_folder, v=1):
+    if v>0: print('Merging weather files...')
+    df = merge_csv_to_dataframe(weather_folder).rename(columns={'PragaTime':'Date'})
+    df['Date'] = pd.to_datetime(df['Date'])
+    return df

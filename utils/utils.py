@@ -114,10 +114,13 @@ def apply_accuracy_df(readings_df, accuracies_df, add_verified_col=False, max_mu
 
     return final_df
 
-def resample_df_on_column(df, agents_dict, column='Date', ):
+def resample_df_on_column(df, agents_dict:dict, column='Date', v=1 ):
+    s=df['Station'].iloc[0]
+    if v>0: print(f'Resampling for station "{s}..."')
     resampled_dfs = []
-    for agent in agents_dict.keys():
-        print(f'Resampling {agent} on {agents_dict[agent]}')
+    df_agents = np.unique(df['Agent'])
+    for agent in df_agents:
+        if v > 1: print(f'- Resampling {agent} ({agents_dict[agent]})')
         mask = df['Agent'] == agent
         resampled = (
             df[mask]
@@ -147,7 +150,7 @@ def fill_missing_dates(df: pd.DataFrame, column=None, method: str = 'ffill'):
     else:
         raise ValueError(f"Invalid method: {method}")
     
-def fill_missing_dates_on_column_value(df, column, column_to_fill, mode):
+def fill_missing_dates_on_column_value(df, column, column_to_fill, mode, v=1):
     '''
     Specify the `method` to use to fill `Nan` values.
 
@@ -155,14 +158,18 @@ def fill_missing_dates_on_column_value(df, column, column_to_fill, mode):
 
     Usually `method` is one of ['ffill', 'bfill', 'interpolate', 'mfill']
     '''
+    s=df['Station'].iloc[0]
+    if v>0: print(f'Filling station "{s}..."')
     for val in np.unique(df[column]):
+        if v>1: print(f'- Filling {val} values')
         mask = df[column] == val
         df[mask] = fill_missing_dates(df[mask], column_to_fill, mode)
     return df
 
-def df_to_agents_dict(df, column='Agent'):
+def df_to_agents_dict(df, column='Agent', v=1):
+    s=df['Station'].iloc[0]
+    if v>0: print(f'Splitting station "{s}"...')
     agents_dict = {}
-
     for agent in np.unique(df[column]):
         agents_dict[agent] = df[df[column] == agent].sort_values(by='Date')
     
@@ -233,9 +240,12 @@ def search_close_readings(df, center, radius, method=haversine):
     # Return filtered DataFrame
     return df[distances <= radius]
 
-def divide_df_by_location(df, geopoint, radius):
+def divide_df_by_location(df, geopoint, radius,v=1):
+    if v>0: print(f'Location: {geopoint}')
+    if v>0: print(f'> Filtering close traffic data...')
     close_df = search_close_readings(df, geopoint, radius)
     close_df=close_df.drop(columns=['geopoint', 'codice spira'])
+    if v>0: print('> Summing up hour data...')
     df_melted = close_df.melt(id_vars=["data"], var_name="Hour", value_name="Value")
     df_melted['Hour'] = df_melted['Hour'].apply(lambda x: x.split('-')[0])
     df_melted['data'] = pd.to_datetime(df_melted['data'] + ' ' + df_melted['Hour'])
@@ -248,53 +258,3 @@ def divide_df_by_location(df, geopoint, radius):
                                 ).reset_index(
                                 ).fillna(0)
     return df_melted
-
-def preprocess_traffic_dataset(df, accuracies_df, centers:list=None, radius=1):
-    def map_values(x):
-        if x == -0.01:
-            return 0
-        return x
-    
-    if centers is None:
-        centers=[
-            '44.482671138769533,11.35406170088398', # giardini margherita
-            '44.499059983334519,11.327526717440112', # san felice
-            '44.499134335170289, 11.285089594971216' # chiarini
-        ]
-
-    df = df.drop(columns=[
-    'id_uni',
-    'Livello',
-    'tipologia',
-    'codice',
-    'codice arco',
-    'codice via',
-    'Nome via',
-    'Nodo da',
-    'Nodo a',
-    'ordinanza',
-    'stato',
-    'codimpsem',
-    'direzione',
-    'angolo',
-    'longitudine',
-    'latitudine',
-    'ID_univoco_stazione_spira',
-    'Giorno della settimana',
-    'giorno settimana'
-    ])
-    df = df.dropna()
-    accuracies_df = convert_percentage_to_number(accuracies_df)
-    accuracies_df = accuracies_df.map(map_values)
-    common_cols = df.columns.intersection(accuracies_df.columns).tolist()
-
-    accurate_traffic_df = apply_accuracy_df(df[common_cols],accuracies_df[common_cols],max_multiplier=15, half_multiplier=2).reset_index(drop=True)
-    df = df.reset_index(drop=True)
-    for col in list(set(df.columns) - set(common_cols)): # add back readings columns
-        accurate_traffic_df[col] = df[col]
-        
-    dfs=[]
-    for center in centers:
-        dfs.append(divide_df_by_location(accurate_traffic_df, center, radius))
-    
-    return dfs
