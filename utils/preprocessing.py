@@ -62,6 +62,9 @@ def preprocess_pollution_dataset(csv_path, v=1):
 
 # === TRAFFIC ===
 def preprocess_traffic_dataset(traffic_folder, locations = None, radius=1, v=1):
+    '''
+	returns a list of dataframe with data sourronding each location.
+    '''
     def map_values(x):
         if x == -0.01:
             return 0
@@ -116,6 +119,9 @@ def preprocess_traffic_dataset(traffic_folder, locations = None, radius=1, v=1):
 
 # === WEATHER ===
 def preprocess_weather_dataset(weather_folder, v=1):
+    '''
+	returns a single df.
+    '''
     if v>0: print('Merging weather files...')
     df = merge_csv_to_dataframe(weather_folder).rename(columns={'PragaTime':'Date'})
     df['Date'] = pd.to_datetime(df['Date'])
