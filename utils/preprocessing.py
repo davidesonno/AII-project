@@ -1,7 +1,14 @@
 from utils import *
+from .distances import *
+from .date_encoding import *
+
+import pandas as pd
+import numpy as np
+import os
 
 
-def prepare_dataset(datasets_folder, dataset, v=1):
+# === PREPROCESSING ===
+def read_and_preprocess_dataset(datasets_folder, dataset, v=1):
     '''
 	`v=0` stops any output prints.
     '''
@@ -17,6 +24,39 @@ def prepare_dataset(datasets_folder, dataset, v=1):
         
         case _:
             return None
+        
+def prepare_station_data_for_training(
+        station_pollution_dict:dict,
+        station_traffic_df:pd.DataFrame,
+        weather_df:pd.DataFrame,
+        encoding_method = 'full-sin-cos'
+):
+    '''
+	Returns a dict mapping agents to their dataframe.\\
+    The dataframe is normalized and encoded with the given `encoding_method`
+    '''
+    merged_dict = {}
+    for agent,agent_pollution_df in station_pollution_dict.items():
+        merged_dict[agent] = merge_datasets(
+            agent_pollution_df,
+            station_traffic_df,
+            weather_df,
+            on='Date',
+            dropna=True
+        )
+
+    normalized_dict = {}
+    for agent,merged_agent_df in merged_dict.items():
+        normalized_dict[agent] = normalize_columns(
+            merged_agent_df,
+            skip=['Date', 'Agent_value']
+        )
+
+    encoded_dict = {}
+    for agent, normalized_agent_dict in normalized_dict.items():
+        encoded_dict[agent] = encode_date(normalized_agent_dict, method=encoding_method)
+
+    return encoded_dict
 
 # === POLLUTION ===
 def preprocess_pollution_dataset(csv_path, v=1):
@@ -31,7 +71,7 @@ def preprocess_pollution_dataset(csv_path, v=1):
         'AGENTE': 'Agent', 
         'DATA_INIZIO': 'Date', 
         'DATA_FINE': 'Ending_date', 
-        'VALORE': 'Value', 
+        'VALORE': 'Agent_value', 
         'UM': 'Unit'
     }, inplace=True)
     df.drop(columns=['Ending_date','Unit'], inplace=True)
@@ -48,19 +88,20 @@ def preprocess_pollution_dataset(csv_path, v=1):
         'PM10': '24h',
         'PM2.5': '24h',
         'CO': '1h',
+        'O3': '1h',
         'NO': '1h',
         'NO2': '1h',
         'NOX': '1h',
-        'O3': '1h',
         'C6H6': '1h'
     }
 
     resampled_dfs = [resample_df_on_column(station_df, agents_dict, v=v) for station_df in stations_dfs]
-    filled_dfs = [fill_missing_dates_on_column_value(resampled_df, column='Agent', column_to_fill='Value', mode='mfill', v=v) for resampled_df in resampled_dfs]
+    filled_dfs = [fill_missing_dates_on_column_value(resampled_df, column='Agent', column_to_fill='Agent_value', mode='mfill', v=v) for resampled_df in resampled_dfs]
 
-    return [df_to_agents_dict(filled_df, v=v) for filled_df in filled_dfs]
+    return [df_to_agents_dict(filled_df, drop_stations=True, drop_agents=True, v=v) for filled_df in filled_dfs]
 
 # === TRAFFIC ===
+
 def preprocess_traffic_dataset(traffic_folder, locations = None, radius=1, v=1):
     '''
 	returns a list of dataframe with data sourronding each location.
@@ -78,9 +119,9 @@ def preprocess_traffic_dataset(traffic_folder, locations = None, radius=1, v=1):
         ]
 
     if v>0: print('Merging readings files...')
-    df = merge_csv_to_dataframe(os.path.join(traffic_folder, 'readings'), sep=';')
+    df = merge_csv_to_dataframe(os.path.join(traffic_folder, 'readings'), v=v, sep=';')
     if v>0: print('Merging accuracies files...')
-    accuracies_df = merge_csv_to_dataframe(os.path.join(traffic_folder, 'accuracies'), sep=';')
+    accuracies_df = merge_csv_to_dataframe(os.path.join(traffic_folder, 'accuracies'), v=v, sep=';')
 
     df = df.drop(columns=[
     'id_uni',
@@ -123,6 +164,6 @@ def preprocess_weather_dataset(weather_folder, v=1):
 	returns a single df.
     '''
     if v>0: print('Merging weather files...')
-    df = merge_csv_to_dataframe(weather_folder).rename(columns={'PragaTime':'Date'})
+    df = merge_csv_to_dataframe(weather_folder, v=v).rename(columns={'PragaTime':'Date'})
     df['Date'] = pd.to_datetime(df['Date'])
     return df
