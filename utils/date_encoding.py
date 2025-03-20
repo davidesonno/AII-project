@@ -27,3 +27,5 @@ def encode_date(df:pd.DataFrame, column='Date', method='full-sin-cos'):
         case _:
             print('Unsupported method')
             return None
+
+# ... soon 

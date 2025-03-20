@@ -1,6 +1,7 @@
 from utils import *
 from .distances import *
 from .date_encoding import *
+from .missing_values import *
 
 import pandas as pd
 import numpy as np

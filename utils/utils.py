@@ -23,58 +23,6 @@ def merge_csv_to_dataframe(input_folder, v=1, **kwargs):
 
 
 # === UTILITIES ===
-def resample_df_on_column(df, agents_dict:dict, column='Date', v=1 ):
-    s=df['Station'].iloc[0]
-    if v>0: print(f'Resampling for station "{s}..."')
-    resampled_dfs = []
-    df_agents = np.unique(df['Agent'])
-    for agent in df_agents:
-        if v > 1: print(f'- Resampling {agent} ({agents_dict[agent]})')
-        mask = df['Agent'] == agent
-        resampled = (
-            df[mask]
-            .resample(agents_dict[agent], on=column)
-            .max()  
-            .reset_index()
-        )
-        resampled['Agent'] = agent 
-        resampled_dfs.append(resampled)
-    res = pd.concat(resampled_dfs)
-    res['Station'] = res['Station'].fillna(df.iloc[0]['Station'])
-    # res['Unit'] = res['Unit'].fillna(df.iloc[0]['Unit']) # I dropped it earlier because it is useless
-    return res
-
-
-def fill_missing_dates(df: pd.DataFrame, column=None, method: str = 'ffill'):
-    '''
-	fills all the nans using the method passed. If using mean filling,
-    `column` specifies the column to use for the average.
-    '''
-    if method == 'mfill':
-        return df.fillna(df[column].mean())
-    
-    elif hasattr(df, method):  
-        return getattr(df, method)()
-    
-    else:
-        raise ValueError(f"Invalid method: {method}")
-    
-def fill_missing_dates_on_column_value(df, column, column_to_fill, mode, v=1):
-    '''
-    Specify the `method` to use to fill `Nan` values.
-
-    Apply filling indipendently on the unique values of `column`.
-
-    Usually `method` is one of ['ffill', 'bfill', 'interpolate', 'mfill']
-    '''
-    s=df['Station'].iloc[0]
-    if v>0: print(f'Filling station "{s}..."')
-    for val in np.unique(df[column]):
-        if v>1: print(f'- Filling {val} values')
-        mask = df[column] == val
-        df[mask] = fill_missing_dates(df[mask], column_to_fill, mode)
-    return df
-
 def df_to_agents_dict(df, column='Agent', drop_stations=False, drop_agents=True, v=1):
     s=df['Station'].iloc[0]
     if v>0: print(f'Splitting station "{s}"...')
@@ -199,5 +147,91 @@ def plot_time_series_per_station(df, value_column, date_column, station_column, 
     plt.show()
 
 
+def plot_missing_value_gaps(df, date_col='Date', value_col='Value', start_date=None, end_date=None, surrounding_vals=10, min_gap=2):
+    df=df.copy()
+    df[date_col] = pd.to_datetime(df[date_col])
+    if start_date and end_date:
+        df = df[(df[date_col] >= start_date) & (df[date_col] <= end_date)].copy()
+    df.sort_values(by=date_col, inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    
+    missing_indices = df[df[value_col].isna()].index
+    gaps = []
+    current_gap = []
+    
+    for idx in missing_indices:
+        if not current_gap or idx == current_gap[-1] + 1:
+            current_gap.append(idx)
+        else:
+            if len(current_gap) >= min_gap:
+                gaps.append(current_gap)
+            current_gap = [idx]
+    if len(current_gap) >= min_gap:
+        gaps.append(current_gap)
+    
+    dataframes = []
+    
+    for gap in gaps:
+        start_idx, end_idx = gap[0], gap[-1]
+        selected_indices = list(range(max(0, start_idx - surrounding_vals), min(len(df), end_idx + 1 + surrounding_vals)))
+        df_selected = df.loc[selected_indices].copy()
+        df_selected.reset_index(drop=True, inplace=True)
+        df_selected["Index"] = range(len(df_selected))
+        dataframes.append(df_selected)
+    
+    num_plots = len(dataframes)
+    cols = min(3, num_plots)
+    rows = (num_plots // cols) + (num_plots % cols > 0)
+    
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 5, rows * 4))
+    axes = np.array(axes).reshape(-1)[:num_plots]
+    
+    for i, (ax, gap_df) in enumerate(zip(axes, dataframes)):
+        l=len(gap_df["Index"])
+        ax.plot(gap_df["Index"], gap_df[value_col], marker="o", linestyle="-")
+        ax.set_title(f'Missing {l - 2*surrounding_vals} consecutive values')
+        xticks = [surrounding_vals-1, l-surrounding_vals]
+        ax.set_xticks(xticks)
+        ax.set_xticklabels(gap_df[date_col].iloc[xticks].dt.strftime('%Y-%m-%d %H:%M')
+                           , rotation=10, ha='right'
+                           )
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_gp(target=None, pred=None, std=None, samples=None,
+        target_samples=None, figsize=None):
+    plt.figure(figsize=figsize)
+    if target is not None:
+        plt.plot(target.index, target, c='black', label='target')
+    if pred is not None:
+        plt.plot(pred.index, pred, c='tab:blue',
+                label='predictions')
+    if std is not None:
+        plt.fill_between(pred.index, pred-1.96*std, pred+1.96*std,
+                alpha=.3, fc='tab:blue', ec='None',
+                label='95% C.I.')
+    # Add scatter plots
+    if samples is not None:
+        try:
+            x = samples.index
+            y = samples.values
+        except AttributeError:
+            x = samples[0]
+            y = samples[1]
+        plt.scatter(x, y, color='tab:orange',
+              label='samples', marker='x')
+    if target_samples is not None:
+        try:
+            x = target_samples.index
+            y = target_samples.values
+        except AttributeError:
+            x = target_samples[0]
+            y = target_samples[1]
+        plt.scatter(x, y,
+                color='black', label='target', s=5)
+    plt.legend()
+    plt.grid(':')
+    plt.tight_layout()
 
 
