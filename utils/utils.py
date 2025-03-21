@@ -23,6 +23,18 @@ def merge_csv_to_dataframe(input_folder, v=1, **kwargs):
 
 
 # === UTILITIES ===
+def create_train_test(df, split_date, y):
+    train = df[df['Date'] <= split_date]
+    test = df[df['Date'] > split_date]
+
+    x_train = train.drop(columns=['Date', y])
+    x_test = test.drop(columns=['Date', y])
+    aux=df.columns
+    y_train = train.drop(columns=[col for col in aux if col !=y])
+    y_test = test.drop(columns=[col for col in aux if col !=y])
+
+    return x_train,y_train,x_test,y_test
+
 def df_to_agents_dict(df, column='Agent', drop_stations=False, drop_agents=True, v=1):
     s=df['Station'].iloc[0]
     if v>0: print(f'Splitting station "{s}"...')

@@ -3,6 +3,8 @@ import numpy as np
 
 
 def encode_date(df:pd.DataFrame, column='Date', method='full-sin-cos'):
+    if method is None:
+        return df
     df[column] = pd.to_datetime(df[column])
     df = df.sort_values(by=column)
     match method:
@@ -22,7 +24,7 @@ def encode_date(df:pd.DataFrame, column='Date', method='full-sin-cos'):
             df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
             df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
 
-            return df.drop(columns=[column, "hour", "day", "month", "days_in_month"])
+            return df.drop(columns=["hour", "day", "month", "days_in_month"])
             
         case _:
             print('Unsupported method')

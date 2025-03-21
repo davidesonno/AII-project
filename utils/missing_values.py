@@ -33,7 +33,7 @@ def fill_missing_dates_with_model(df, settings:dict):
     # TODO fill this after developing the 'Process' section
     pass
 
-def fill_missing_dates(df: pd.DataFrame, column=None, method: str = 'ffill', model_settings:dict=None):
+def fill_missing_dates(df: pd.DataFrame, method: str = 'ffill', column=None, model_settings:dict=None):
     '''
 	fills all the nans using the method passed. If using mean filling,
     `column` specifies the column to use for the average.
@@ -64,5 +64,5 @@ def fill_missing_dates_on_column_value(df, column, column_to_fill, mode, model_s
     for val in np.unique(aux[column]):
         if v>1: print(f'- Filling {val} values')
         mask = aux[column] == val
-        aux[mask] = fill_missing_dates(aux[mask], column_to_fill, mode)
+        aux[mask] = fill_missing_dates(aux[mask], method=mode, column=column_to_fill)
     return aux
