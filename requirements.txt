@@ -7,3 +7,4 @@ ipykernel
 statsmodels
 geopy
 xgboost
+jinja2
