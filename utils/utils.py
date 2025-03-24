@@ -35,18 +35,20 @@ def create_train_test(df, split_date, y):
 
     return x_train,y_train,x_test,y_test
 
-def df_to_agents_dict(df, column='Agent', drop_stations=False, drop_agents=True, v=1):
+def df_to_agents_dict(df, column='Agent', drop_stations=False, drop_agents=True, drop_duplicates=True, v=1):
     s=df['Station'].iloc[0]
     if v>0: print(f'Splitting station "{s}"...')
     agents_dict = {}
     for agent in np.unique(df[column]):
-        agent_dict = df[df[column] == agent].sort_values(by='Date')
+        agent_df = df[df[column] == agent].sort_values(by='Date')
         if drop_stations:
-            agent_dict = agent_dict.drop(columns='Station')
+            agent_df = agent_df.drop(columns='Station')
         if drop_agents:
-            agent_dict = agent_dict.drop(columns='Agent')
+            agent_df = agent_df.drop(columns='Agent')
+        if drop_duplicates:
+            agent_df = agent_df.drop_duplicates(subset='Date')
         
-        agents_dict[agent] = agent_dict
+        agents_dict[agent] = agent_df
     
     return agents_dict
 

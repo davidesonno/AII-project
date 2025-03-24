@@ -6,6 +6,7 @@ from .missing_values import *
 import pandas as pd
 import numpy as np
 import os
+from datetime import timedelta
 
 
 # === PREPROCESSING ===
@@ -13,7 +14,7 @@ def read_and_preprocess_dataset(datasets_folder, dataset, resample=False, fill_m
     '''
 	`v=0` stops any output prints.
 
-    FIXME: `resample`=False is still going to resample to adjust spurios minutes
+    FIXME: `resample`= False is still going to resample to adjust spurios minutes
     in the dates. After that the missing rows are dropped. It is slowwwww, so 
     find a better method to fix minutes.
     '''
@@ -80,8 +81,10 @@ def preprocess_pollution_dataset(csv_path, fill_method, resample=False, v=1):
         'UM': 'Unit'
     }, inplace=True)
     df.drop(columns=['Ending_date','Unit'], inplace=True)
+    df = df[~df['Agent'].isin(['NO','NOX'])]
     df=df.sort_values(by='Date')
     df['Date'] = pd.to_datetime(df['Date'].apply(lambda x: ' '.join(x.split('T')).split('+')[0]))
+    df['Date'] = df['Date'].apply(lambda x: x - timedelta(minutes=x.minute))
     df['Agent'] = df['Agent'].apply(lambda x: x.split(' ')[0])
     # split by station
     stations = np.unique(df['Station'])
@@ -94,20 +97,18 @@ def preprocess_pollution_dataset(csv_path, fill_method, resample=False, v=1):
         'PM2.5': '24h',
         'CO': '1h',
         'O3': '1h',
-        'NO': '1h',
+        # 'NO': '1h',
         'NO2': '1h',
-        'NOX': '1h',
+        # 'NOX': '1h',
         'C6H6': '1h'
     }
 
-    filled_dfs:list
-    resampled_dfs = [resample_df_on_column(station_df, agents_dict, v=v) for station_df in stations_dfs]
     if resample:
+        resampled_dfs = [resample_df_on_column(station_df, agents_dict, v=v) for station_df in stations_dfs]
         filled_dfs = [fill_missing_dates_on_column_value(resampled_df, column='Agent', column_to_fill='Agent_value', mode=fill_method, v=v) for resampled_df in resampled_dfs]
-    else:
-        filled_dfs = [resampled_df.dropna() for resampled_df in resampled_dfs]
+        return [df_to_agents_dict(filled_df, drop_stations=True, drop_agents=True, v=v) for filled_df in filled_dfs]
 
-    return [df_to_agents_dict(filled_df, drop_stations=True, drop_agents=True, v=v) for filled_df in filled_dfs]
+    return [df_to_agents_dict(stations_df, drop_stations=True, drop_agents=True, v=v) for stations_df in stations_dfs]
 
 # === TRAFFIC ===
 
