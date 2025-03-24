@@ -24,11 +24,11 @@ def merge_csv_to_dataframe(input_folder, v=1, **kwargs):
 
 # === UTILITIES ===
 def create_train_test(df, split_date, y):
-    train = df[df['Date'] <= split_date]
-    test = df[df['Date'] > split_date]
+    train = df[df.index <= split_date]
+    test = df[df.index > split_date]
 
-    x_train = train.drop(columns=['Date', y])
-    x_test = test.drop(columns=['Date', y])
+    x_train = train.drop(columns=[y])
+    x_test = test.drop(columns=[y])
     aux=df.columns
     y_train = train.drop(columns=[col for col in aux if col !=y])
     y_test = test.drop(columns=[col for col in aux if col !=y])
@@ -46,21 +46,21 @@ def df_to_agents_dict(df, column='Agent', drop_stations=False, drop_agents=True,
         if drop_agents:
             agent_df = agent_df.drop(columns='Agent')
         if drop_duplicates:
-            agent_df = agent_df.drop_duplicates(subset='Date')
+            agent_df = agent_df[~agent_df.index.duplicated(keep='first')]
         
         agents_dict[agent] = agent_df
     
     return agents_dict
 
 
-def merge_datasets(*args, on, dropna=True):
+def join_datasets(*args, dropna=True):
     """
-    Merges multiple DataFrames on the specified 'on' column.
+    Merges multiple DataFrames using their index.
     """
     merged_df = args[0]
     
     for df in args[1:]:
-        merged_df = merged_df.merge(df, on=on, how='left')
+        merged_df = merged_df.join(df, how='left')
     
     if dropna:
         merged_df = merged_df.dropna()
@@ -138,7 +138,11 @@ def plot_time_series_per_station(df, value_column, date_column, station_column, 
 
     # Apply date filtering if needed
     if start_date and end_date:
-        df = df[(df[date_column] >= start_date) & (df[date_column] < end_date)]
+        df = df[(df[date_column] >= start_date) & (df[date_column] <= end_date)].copy()
+    elif start_date:
+        df = df[(df[date_column] >= start_date)].copy()
+    elif end_date:
+        df = df[(df[date_column] <= end_date)].copy()
     
     df = df.sort_values(date_column)
 
@@ -161,12 +165,16 @@ def plot_time_series_per_station(df, value_column, date_column, station_column, 
     plt.show()
 
 
-def plot_missing_value_gaps(df, date_col='Date', value_col='Value', start_date=None, end_date=None, surrounding_vals=10, min_gap=2):
+def plot_missing_value_gaps(df, date_column='Date', value_col='Value', start_date=None, end_date=None, surrounding_vals=10, min_gap=2):
     df=df.copy()
-    df[date_col] = pd.to_datetime(df[date_col])
+    df[date_column] = pd.to_datetime(df[date_column])
     if start_date and end_date:
-        df = df[(df[date_col] >= start_date) & (df[date_col] <= end_date)].copy()
-    df.sort_values(by=date_col, inplace=True)
+        df = df[(df[date_column] >= start_date) & (df[date_column] <= end_date)].copy()
+    elif start_date:
+        df = df[(df[date_column] >= start_date)].copy()
+    elif end_date:
+        df = df[(df[date_column] <= end_date)].copy()
+    df.sort_values(by=date_column, inplace=True)
     df.reset_index(drop=True, inplace=True)
     
     missing_indices = df[df[value_col].isna()].index
@@ -206,7 +214,7 @@ def plot_missing_value_gaps(df, date_col='Date', value_col='Value', start_date=N
         ax.set_title(f'Missing {l - 2*surrounding_vals} consecutive values')
         xticks = [surrounding_vals-1, l-surrounding_vals]
         ax.set_xticks(xticks)
-        ax.set_xticklabels(gap_df[date_col].iloc[xticks].dt.strftime('%Y-%m-%d %H:%M')
+        ax.set_xticklabels(gap_df[date_column].iloc[xticks].dt.strftime('%Y-%m-%d %H:%M')
                            , rotation=10, ha='right'
                            )
 

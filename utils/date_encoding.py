@@ -2,18 +2,20 @@ import pandas as pd
 import numpy as np
 
 
-def encode_date(df:pd.DataFrame, column='Date', method='full-sin-cos'):
+def encode_date_index(df:pd.DataFrame, method='full-sin-cos'):
+    '''
+	Assumes that the index is a datetime.
+    '''
     if method is None:
         return df
-    df[column] = pd.to_datetime(df[column])
-    df = df.sort_values(by=column)
+    df = df.sort_index()
     match method:
         case 'full-sin-cos':
 
-            df["hour"] = df[column].dt.hour
-            df["day"] = df[column].dt.day
-            df["month"] = df[column].dt.month
-            df["days_in_month"] = df[column].dt.days_in_month
+            df["hour"] = df.index.hour
+            df["day"] = df.index.day
+            df["month"] = df.index.month
+            df["days_in_month"] = df.index.days_in_month
 
             df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
             df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
@@ -27,10 +29,10 @@ def encode_date(df:pd.DataFrame, column='Date', method='full-sin-cos'):
             return df.drop(columns=["hour", "day", "month", "days_in_month"])
         
         case 'radial_months_days-sin-cos_hours':
-            df["hour"] = df[column].dt.hour
-            df["day"] = df[column].dt.day
-            df["month"] = df[column].dt.month
-            df["days_in_month"] = df[column].dt.days_in_month
+            df["hour"] = df.index.hour
+            df["day"] = df.index.day
+            df["month"] = df.index.month
+            df["days_in_month"] = df.index.days_in_month
 
             # Sin/Cos for hours
             df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
@@ -59,10 +61,10 @@ def encode_date(df:pd.DataFrame, column='Date', method='full-sin-cos'):
             return df.drop(columns=["hour", "day", "month", "days_in_month"])
         
         case 'radial_months-sin-cos_days_hours':
-            df["hour"] = df[column].dt.hour
-            df["day"] = df[column].dt.day
-            df["month"] = df[column].dt.month
-            df["days_in_month"] = df[column].dt.days_in_month
+            df["hour"] = df.index.hour
+            df["day"] = df.index.day
+            df["month"] = df.index.month
+            df["days_in_month"] = df.index.days_in_month
 
             df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
             df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)

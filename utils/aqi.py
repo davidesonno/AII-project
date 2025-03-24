@@ -2,62 +2,104 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-#https://forum.airnowtech.org/t/the-aqi-equation/169
-CONC = { "PM25":{
-            'LO':[0, 12.1, 35.5, 55.5, 150.5, 250.5],
-            'HI':[12.0, 35.4, 55.4, 150.4, 250.4, 500.4]},
+def compute_PM(value, agent):
+    #https://forum.airnowtech.org/t/the-aqi-equation/169
+    CONC = { 
+        'PM2.5':{
+            'LO':[0, 9.1, 35.5, 55.5, 125.5, 255.5],
+            'HI':[9.0, 35.4, 55.4, 125.4, 225.4, 325.4]
+            # 'LO':[0, 12.1, 35.5, 55.5, 150.5, 250.5],
+            # 'HI':[12.0, 35.4, 55.4, 150.4, 250.4, 500.4]
+            },
         'PM10':{
             'LO':[0, 55, 155, 255, 355, 425],
-            'HI':[54, 154, 254, 354, 424, 604]}
-}
-AQI ={'LO': [0, 51, 101, 151, 201, 301],
-      'HI': [50, 100, 150, 200, 300, 500]}
+            'HI':[54, 154, 254, 354, 424, 604]
+            },
+        'O3':{
+            'LO':[0, 125, 165, 205, 405], # I add to add a lower bound
+            'HI':[124, 164, 204, 404, 604] # I also added a starting value here
+            }
+    }
+    AQI ={
+        'PM2.5':{
+            'LO': [0, 51, 101, 151, 201, 301],
+            'HI': [50, 100, 150, 200, 300, 500]
+            },
+        'PM10':{
+            'LO': [0, 51, 101, 151, 201, 301],
+            'HI': [50, 100, 150, 200, 300, 500]
+            },
+        'O3':{
+            'LO': [101, 151, 201, 301],
+            'HI': [150, 200, 300, 500]
+            }
+    }
 
-def compute_PM(value, agent):
-    if value >0:
-        conc_lo = max([x for x in CONC[agent]['LO'] if x <= value])
-        conc_hi = min([x for x in CONC[agent]['HI'] if x >= value])
-        aqi_lo = AQI['LO'][CONC[agent]['LO'].index(conc_lo)]
-        aqi_hi = AQI['HI'][CONC[agent]['HI'].index(conc_hi)]
-        aqi = (aqi_hi - aqi_lo) / (conc_hi - conc_lo) * (value - conc_lo) + aqi_lo
-        # print(value)
-        # print(conc_lo, conc_hi, aqi_lo, aqi_hi, aqi)
-        return aqi
+    if value > 0:
+        try:
+            conc_lo = max([x for x in CONC[agent]['LO'] if x <= value])
+            conc_hi = min([x for x in CONC[agent]['HI'] if x >= value])
+            aqi_lo = AQI[agent]['LO'][CONC[agent]['LO'].index(conc_lo)]
+            aqi_hi = AQI[agent]['HI'][CONC[agent]['HI'].index(conc_hi)]
+            aqi = (aqi_hi - aqi_lo) / (conc_hi - conc_lo) * (value - conc_lo) + aqi_lo
+            # print(value)
+            # print(conc_lo, conc_hi, aqi_lo, aqi_hi, aqi)
+            return aqi
+        except ValueError as e:
+            print(f"Error with value: {value}, agent: {agent}")
+            raise ValueError(e)
     else:
+        # does this ever happen? if it is 0 why nan, should we keep 0?
         return np.nan
 
-def get_AQI(df:pd.DataFrame, agent, limit, period, value_column, date_column:str='Date'):
+def get_AQI(df:pd.DataFrame, agent, limit, period, value_column, date_column:str='Date', breakpoints=True, include_hourly_pm=True):
     if period not in ('day', 'hour'): 
         return ValueError(f'Period can only be `day` or `hour`. Got {period} instead')
     aqi = df.copy()
     if period == 'hour':
         if agent in ('PM2.5','PM10'):
-            agent = 'PM25' if agent == 'PM2.5' else agent
+            if include_hourly_pm:
+                if breakpoints:
+                    aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
+                else: 
+                    aqi['AQI'] = aqi[value_column] / limit * 100
+
+                aqi = aqi.set_index(date_column)
+                aqi = aqi.resample('1h').ffill().bfill()
+                aqi = aqi.drop(columns=[value_column])
+            else:
+                aqi = pd.DataFrame()
+        elif agent in ('O3') and breakpoints:
             aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
-            # aqi['AQI'] = 0
-            aqi = aqi.set_index(date_column)
-            aqi = aqi.resample('1h').ffill().bfill()
             aqi = aqi.drop(columns=[value_column])
-        else:    
-            aqi['AQI'] = aqi[value_column]/limit*100
+            aqi = aqi.set_index(date_column)
+        else:
+            aqi['AQI'] = aqi[value_column] / limit * 100
             aqi = aqi.drop(columns=[value_column])
             aqi = aqi.set_index(date_column)
 
     if period == 'day':
         if agent in ('PM2.5','PM10'):
-            agent = 'PM25' if agent == 'PM2.5' else agent
-            aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
+            if include_hourly_pm:
+                if breakpoints:
+                    aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
+                else: 
+                    aqi['AQI'] = aqi[value_column] / limit * 100
+
             aqi = aqi.set_index(date_column)
             aqi = aqi.drop(columns=[value_column])
 
         # average agents
         if agent in ('O3','NO2','C6H6'):
             aqi = aqi.resample('D',on=date_column).mean()
-            aqi['AQI'] = aqi[value_column] / limit * 100
+            if agent in ('O3') and breakpoints:
+                aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
+            else:
+                aqi['AQI'] = aqi[value_column] / limit * 100
             aqi = aqi.drop(columns=[value_column])
 
         # MaSsImA dElLe MeDiE mObIlI sU 8 oRe
-        if agent == 'CO':
+        if agent in ('CO'):
             aqi = aqi.set_index(date_column).resample('1h').max()
 
             def rolling_average(day):
@@ -72,7 +114,7 @@ def get_AQI(df:pd.DataFrame, agent, limit, period, value_column, date_column:str
 
     return aqi 
 
-def plot_AQI(station_dict, period, title ='',figsize=(20,5), plotly=False):
+def plot_AQI(station_dict, period, title ='',figsize=(20,5), s=None, e=None, plotly=False):
     if period not in ('day', 'hour'): 
         return ValueError(f'Period can only be `day` or `hour`. Got {period} instead')
     hour = period == 'hour'
@@ -83,8 +125,17 @@ def plot_AQI(station_dict, period, title ='',figsize=(20,5), plotly=False):
     aqi_df.loc[:, 'agent'] = agents[0]
     for key in agents[1:]:
         aux = station_dict[key].copy()
-        aux.loc[:, 'agent'] = key
-        aqi_df = pd.concat([aqi_df, aux])
+        try:
+            aux.loc[:, 'agent'] = key
+            aqi_df = pd.concat([aqi_df, aux])
+        except: pass
+
+    if s and e:
+        aqi_df = aqi_df[(aqi_df.index>=s)&(aqi_df.index<=e)]
+    elif s:
+        aqi_df = aqi_df[(aqi_df.index>=s)]
+    elif e:
+        aqi_df = aqi_df[(aqi_df.index<=e)]
 
     aqi_df = aqi_df.fillna(-np.inf)
     aqi_df = aqi_df.sort_values(['AQI'])

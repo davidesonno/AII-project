@@ -64,13 +64,13 @@ def search_close_readings(df, center, radius, method=haversine):
     # Return filtered DataFrame
     return df[distances <= radius]
 
-def divide_df_by_location(df, geopoint, radius,v=1):
-    if v>0: print(f'Location: {geopoint}')
-    if v>0: print(f'> Filtering close traffic data...')
+def divide_df_by_location(df, geopoint, radius, name=None, v=1):
+    if v>0: print(f'Location{" "+name if name else ""}: {geopoint}')
+    if v>0: print(f' > Filtering close traffic data...')
     close_df = search_close_readings(df, geopoint, radius)
     close_df=close_df.drop(columns=['geopoint', 'codice spira'])
-    if v>0: print('> Summing up hour data...')
-    df_melted = close_df.melt(id_vars=["data"], var_name="Hour", value_name="Traffic_value")
+    if v>0: print(' > Summing up hour data...')
+    df_melted = close_df.reset_index().melt(id_vars=["data"], var_name="Hour", value_name="Traffic_value")
     df_melted['Hour'] = df_melted['Hour'].apply(lambda x: x.split('-')[0])
     df_melted['data'] = pd.to_datetime(df_melted['data'] + ' ' + df_melted['Hour'])
     
@@ -81,4 +81,5 @@ def divide_df_by_location(df, geopoint, radius,v=1):
                                 ).mean(
                                 ).reset_index(
                                 ).fillna(0)
+    df_melted = df_melted.set_index('Date')
     return df_melted
