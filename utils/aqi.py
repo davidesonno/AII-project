@@ -9,7 +9,8 @@ def get_AQI(df:pd.DataFrame, agent, limit, period, value_column, date_column:str
     aqi = df.copy()
     if period == 'hour':
         if agent in ('PM2.5','PM10'):
-            aqi['AQI'] = aqi[value_column]/limit*100
+            # aqi['AQI'] = aqi[value_column]/limit*100
+            aqi['AQI'] = 0
             aqi[date_column] = pd.to_datetime(df[date_column])
             aqi = aqi.set_index(date_column)
             aqi = aqi.resample('1h').ffill().bfill()
@@ -64,20 +65,23 @@ def plot_AQI(station_dict, period, figsize=(20,5)):
     for key in agents[1:]:
         aux = station_dict[key].copy()
         aux['agent'] = key
-        # display(aux)
         aqi_df = pd.concat([aqi_df, aux])
 
-    # display(aqi_df)
-    aqi_df = aqi_df.groupby(aqi_df.index)
-    display(aqi_df)
+    # aqi_df = aqi_df.groupby(aqi_df.index).max()
+    aqi_df = aqi_df.fillna(-np.inf)
+    aqi_df = aqi_df.sort_values(['AQI'])
+    aqi_df = aqi_df.reset_index()
+    aqi_df = aqi_df.drop_duplicates(subset='Date', keep='last')
+    aqi_df = aqi_df.set_index('Date')
     aqi_df = aqi_df.resample(freq).max()
     aqi_df['agent'] = aqi_df['agent'].fillna('missing')
+    # aqi_df['AQI'] = aqi_df['AQI'].fillna(150)
 
     agents = aqi_df['agent'].unique()
-
+    # display(aqi_df)
     plt.figure(figsize=figsize)
     for _, segment in aqi_df.groupby('agent'):
-        plt.bar(segment.index, segment['AQI'], label=f'{segment["agent"].iloc[0]}',width=0.03)
+        plt.bar(segment.index, segment['AQI'], label=f'{segment["agent"].iloc[0]}',width=0.03 if hour else 0.9)
 
     plt.legend(loc='upper left')
     plt.show()
