@@ -1,4 +1,4 @@
-# Artificial Intellgience in Industry - project
+# Artificial Intelligence in Industry - project
 
 The aim of the project is to estimate air pollution according to the traffic and weather conditions. To do so, data from Bologna, Italy have been used.
 
@@ -19,7 +19,7 @@ Readings from three stations in Bologna. Each station collects a bunch of measur
 * **PM10**
 * **PM2.5**
 
-Some measures might be missing. For example *PM10* and *PM2.5* are not often present.
+The measurement for a specific hour and a specific agent might be missing. Also, *PM10* and *PM2.5* are daily measures.
 
 ### Traffic
 
