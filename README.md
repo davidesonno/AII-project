@@ -19,7 +19,7 @@ Readings from three stations in Bologna. Each station collects a bunch of measur
 * **PM10**
 * **PM2.5**
 
-Some measures might be missing. For example *PM10* and *PM2.5* are not often present.
+The measurement for a specific hour and a specific agent might be missing. Also, *PM10* and *PM2.5* are daily measures.
 
 ### Traffic
 
