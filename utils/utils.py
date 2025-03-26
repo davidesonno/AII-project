@@ -23,6 +23,24 @@ def merge_csv_to_dataframe(input_folder, v=1, **kwargs):
 
 
 # === UTILITIES ===
+def extract_data(results):
+    data = []
+    names = []
+    for station, agents in results.items():
+        for agent, models in agents.items():
+            for model, values in models.items():
+                try:
+                    metrics = values["metric_scores"]
+                    names = metrics.keys()
+                    values = metrics.values()
+                    data.append([station, agent, model] + list(values))
+                except: pass
+    return pd.DataFrame(data, columns=["Station", "Agent", "Model"] + list(names))
+
+def display_metric_scores(metric_dict, start=''):
+    for metric, score in metric_dict.items():
+        print(f'{start}- {metric}: {score}')
+
 def create_train_test(df, split_date, y):
     train = df[df.index <= split_date]
     test = df[df.index > split_date]

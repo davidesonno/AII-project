@@ -167,6 +167,7 @@ def preprocess_pollution_dataset(csv_path, fill_method, resample=False, v=1):
     df['Date'] = df['Date'].apply(lambda x: x - timedelta(minutes=x.minute))
     df = df.set_index('Date')
     df['Agent'] = df['Agent'].apply(lambda x: x.split(' ')[0])
+    df = df[~df['Agent'].isin(['NO','NOX'])] # drop unwanted agents
     # split by station
     stations = np.unique(df['Station'])
     if v>0: print('Stations found: ', end='')
