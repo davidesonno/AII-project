@@ -23,36 +23,6 @@ def merge_csv_to_dataframe(input_folder, v=1, **kwargs):
 
 
 # === UTILITIES ===
-def extract_data(results):
-    data = []
-    names = []
-    for station, agents in results.items():
-        for agent, models in agents.items():
-            for model, values in models.items():
-                try:
-                    metrics = values["metric_scores"]
-                    names = metrics.keys()
-                    values = metrics.values()
-                    data.append([station, agent, model] + list(values))
-                except: pass
-    return pd.DataFrame(data, columns=["Station", "Agent", "Model"] + list(names))
-
-def display_metric_scores(metric_dict, start=''):
-    for metric, score in metric_dict.items():
-        print(f'{start}- {metric}: {score}')
-
-def create_train_test(df, split_date, y):
-    train = df[df.index <= split_date]
-    test = df[df.index > split_date]
-
-    x_train = train.drop(columns=[y])
-    x_test = test.drop(columns=[y])
-    aux=df.columns
-    y_train = train.drop(columns=[col for col in aux if col !=y])
-    y_test = test.drop(columns=[col for col in aux if col !=y])
-
-    return x_train,y_train,x_test,y_test
-
 def df_to_agents_dict(df, column='Agent', drop_stations=False, drop_agents=True, drop_duplicates=True, v=1):
     s=df['Station'].iloc[0]
     if v>0: print(f'Splitting station "{s}"...')
