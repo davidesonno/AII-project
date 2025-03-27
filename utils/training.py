@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
+import copy
+import tensorflow as tf
 
 # === TRAINING UTILITIES ===
 def create_train_test(df, split_date, y):
@@ -16,23 +17,40 @@ def create_train_test(df, split_date, y):
 
     return x_train,y_train,x_test,y_test
 
+# === METRICS ===
+def log_cosh_loss(y_true, y_pred):
+    return tf.reduce_mean(tf.math.log(tf.cosh(y_pred - y_true)))
+
+def huber(y_true,y_pred):
+    return tf.keras.losses.Huber(delta=0.2)(y_true,y_pred).numpy()
+
+
 # === METRICS UTILITIES ===
 def display_metric_scores(metric_dict, start=''):
     for metric, score in metric_dict.items():
         print(f'{start}- {metric}: {score}')
 
 def update_metrics(old_results, true_values, metrics):
-    new_results = old_results.copy()
-    for station, station_results in old_results.items():
+    '''
+    Computes new metric values for the predicted data.
+    '''
+    new_results = copy.deepcopy(old_results)
+    
+    for station, station_results in new_results.items():
         for agent, agent_results in station_results.items():
             for model, model_results in agent_results.items():
-                metric_scores = {}
+                metric_scores = model_results['metric_scores']
                 predictions = model_results['predictions']
                 for m in metrics:
-                    score = m(true_values[station][agent]['y'],predictions)
-                    metric_scores[m.__name__] = score
-
-                new_results[station][agent][model]['metric_scores'] = metric_scores
+                    name = 'loss'
+                    try:
+                        name = m.__name__
+                    except: 
+                        name = type(m).__name__
+                        pass
+                    if name not in metric_scores:
+                        score = m(true_values[station][agent]['y'], predictions)
+                        metric_scores[name] = score
 
     return new_results
 
@@ -97,10 +115,11 @@ def check_execution_values(to_execute, data, return_dict=False):
                 for station in to_execute['stations']:                
                         if station not in results:
                             results[station] = {}
-                        if agent not in results[station]:
-                            results[station][agent] = {}
-                        if model not in results[station][agent]:
-                            results[station][agent][model] = {}
+                        if agent in data[station]:
+                            if agent not in results[station]:
+                                results[station][agent] = {}
+                            if model not in results[station][agent]:
+                                results[station][agent][model] = {}
         
         return to_execute, results
 
@@ -112,16 +131,30 @@ def create_sequences(x_df, time_steps=10):
         X.append(x_df.iloc[i:i+time_steps].values) # time_steps values are needed to predict the next value
     return np.array(X)
 
-def train_models(models, training_data, test_data, metrics, to_execute:list|dict='all', ignore:list|dict=None, v=1):
+def train_models(models, training_data, test_data, metrics=[], to_execute:list|dict='all', ignore:list|dict=None, v=1):
     '''
-	For `to_execute` and `ignore` it can be a list of agents to execute or ignore, respectively.
-    It could also be a dict with stations/agents/models to execute or ignore. If so, values must be lists.
+    Run all the models at once. 
+
+	`to_execute` and `ignore` can be a list of agents to execute or ignore, respectively.
+    It could also be a dict with stations/agents/models to execute or ignore. If so, values can be lists or the string 'all'.
+    If a key is not present, all the possible values are used. e.g. if `stations` is missing, all the stations are executed.
     The idea is to be able to chose what to execute or what not to execute. Anyways, both can be specified at the 
     same time and will be merged.
 
     NOTE: to specify models, use the same name that appears in `models` keys.
 
-    Returns: station: dict[agent: dict[model: dict[prediction: predictions, metric_scores: dict[metric:score]]]]
+    `v`=2 will print metric scores after each training.
+
+    Returns a dict:
+    ```
+    {   station: {  # Key: station identifier
+            agent: {  # Key: agent identifier
+                model: {  # Key: model identifier
+                    "prediction": predictions,
+                    "metric_scores": {
+                        metric: score 
+    }}}}}
+    ```
     '''
     # retrieve all the possible values for agents, STATIONS and models
     agents = list({agent for station in training_data.values() for agent in station.keys()})
@@ -131,12 +164,12 @@ def train_models(models, training_data, test_data, metrics, to_execute:list|dict
     to_execute = prepare_execution_values(agents, stations, model_names, to_execute, ignore)
     to_execute, results = check_execution_values(to_execute, test_data, return_dict=True)
 
-    if v>0:
-        print('==========================================================')
+    if v>=0:
+        print('==================================================================================')
         print('Train settings:')
         for key, value in to_execute.items():
             print(f'{key}: {value}')
-        print('==========================================================')
+        print('==================================================================================')
 
     for agent in to_execute['agents']:
         if v>0: print(f'Agent {agent}')
@@ -171,7 +204,7 @@ def train_models(models, training_data, test_data, metrics, to_execute:list|dict
                         model_instance.fit(x_train, y_train, **training_params)
                         predictions = model_instance.predict(x_test)
 
-                    predictions = pd.DataFrame(predictions, index=y_test.index)
+                    predictions = pd.DataFrame(predictions, index=y_test.index, columns=['Agent_value'])
 
                     metric_scores = {}
                     for m in metrics:
@@ -184,6 +217,44 @@ def train_models(models, training_data, test_data, metrics, to_execute:list|dict
                     results[station][agent][model]['metric_scores'] = metric_scores
 
     return results
+
+def train_agents(models, training_data, test_data, v=1):
+    results = {station:{agent:[] for agent in agents} for station,agents in models.items()}
+    for station, agents in models.items():
+        for agent, model in agents.items():
+            x_train, y_train, x_test, y_test = training_data[station][agent]['x'],training_data[station][agent]['y'],test_data[station][agent]['x'],test_data[station][agent]['y']
+            model_desc,model_generator, model_params, training_params, uses_sequences = model
+            if training_params is None:
+                training_params = {}
+            if uses_sequences:
+                if 'time_steps' not in model_params:
+                    raise KeyError('No `time_steps` key found in the model parameters to compute the sequences')
+                ts = model_params['time_steps']
+
+                x_test = pd.concat([x_train.iloc[-ts:],x_test]) # add the needed values
+
+                x_train = create_sequences(x_train, ts)
+                y_train = y_train.iloc[ts:]
+
+                x_test = create_sequences(x_test, ts)
+            else: # if not using sequences, flatten
+                y_train = y_train.to_numpy().ravel()
+
+            model_instance = model_generator(**model_params)
+            if v>0: print(f'Predicting {agent} in {station} using {model_desc}...')
+            try:
+                model_instance.fit(x_train, y_train, **training_params, verbose=0)
+                predictions = model_instance.predict(x_test, verbose=0)
+            except TypeError:
+                model_instance.fit(x_train, y_train, **training_params)
+                predictions = model_instance.predict(x_test)
+
+            predictions = pd.DataFrame(predictions, index=y_test.index, columns=['Agent_value'])
+
+            results[station][agent] = predictions
+
+    return results
+
 
 # === RESULTS ===
 def extract_data(results):
@@ -202,3 +273,4 @@ def extract_data(results):
 
 # === PLOTS ===
 def plot_train_results(): pass
+    # adapt the plot used in the section to compare test results
