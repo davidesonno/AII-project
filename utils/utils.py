@@ -64,6 +64,7 @@ def convert_percentage_to_number(df):
 def apply_accuracy_df(readings_df, accuracies_df, add_verified_col=False, max_multiplier=100, half_multiplier=2):
 
     def accuracy_coeff(accuracies:pd.Series, max, half):
+        #TODO
         return accuracies.where(accuracies == 0, 1 / accuracies)
 
     merged_df = readings_df.merge(accuracies_df, on=['data', 'codice spira'], 

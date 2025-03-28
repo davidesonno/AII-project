@@ -10,7 +10,12 @@ from datetime import timedelta
 
 
 # === UTILITIES ===
-def mean_wind_direction(vectors:pd.Series):
+def mean_vector_direction(vectors:pd.Series):
+    '''
+	Performs the average direction of a given `pd.Series` of angles, in degree.
+
+    Returns the angle in degrees.
+    '''
     x = np.cos(np.radians(vectors))
     y = np.sin(np.radians(vectors))
     mean_x = np.mean(x)
@@ -20,74 +25,57 @@ def mean_wind_direction(vectors:pd.Series):
         
     return mean_direction
 
+DEFAULT_AGGREGATIONS = {
+    # 'W_SCAL_INT': 'mean', # 'mean' by default
+    'PREC': 'sum',
+    'RAD': 'sum',
+    'W_VEC_DIR': mean_vector_direction,
+    'LEAFW': lambda x: (x > 0).sum()
+}
+DEFAULT_MAX_MIN_COLUMNS = ['TAVG', 'RHAVG']
 
-def transform_weather_to_daily_df(df:pd.DataFrame):
-    # 1. Averaging (Mean)
-    # For variables that fluctuate throughout the day and are best represented by an average:
-    # TAVG (Average Temperature) → Daily mean
-    # RHAVG (Average Relative Humidity) → Daily mean
-    # W_SCAL_INT (Scalar Wind Intensity) → Daily mean
-    # RAD (Solar Radiation) → Daily mean (though total may also be used)
+def transform_weather_to_daily_df(df:pd.DataFrame, aggregations={}, max_min_columns=[], keep_splitted_columns=True, **kwargs):
+    '''
+	The `aggregations` dictionary is passed to `df.agg()` and should therefore have the proper syntax.
+    '''
     agg = {col:'mean' for col in df.columns} # by default set the aggregation to sum. The columns might be named differently
 
-    # For specific columns use different aggregations
-    # 2. Summation (Total)
-    # For variables that accumulate over the day:
-    # PREC (Precipitation) → Daily total (sum of hourly values)
-    # RAD (Solar Radiation) → Daily total (sum of hourly values)
-    # ET0 (Evapotranspiration) → Daily total
-    if 'PREC' in agg:
-        agg['PREC'] = 'sum'
-    if 'RAD' in agg: # NOTE: this is overriding RAD:sum
-        agg['RAD'] = 'sum'
-    if 'ET0' in agg: # dropped
-        agg['ET0'] = 'sum'
-
-    # 3. Vector-Based Aggregation (Wind)
-    # For wind direction, a simple average can be misleading, so it’s computed using a vector average:
-    # W_VEC_DIR (Vector Wind Direction) → Compute daily resultant vector and then find the mean direction
-    if 'W_VEC_DIR' in agg:
-        agg['W_VEC_DIR'] = mean_wind_direction
-
-    # 4. Maximum / Minimum
-    # For variables where the extreme values matter:
-    # TAVG → Compute TMAX and TMIN separately if needed
-    # RHAVG → Compute RHMAX and RHMIN if necessary
-    max_min_agg = {}
-    original_cols = []
-    for col in ['TAVG', 'RHAVG']:
-        if col in df.columns: # NOTE: this is overriding TAVG:sum and RHAVG:sum
-            original_cols.append(col)
-            max_min_agg[f"{col}_MAX"] = (col, 'max')
-            max_min_agg[f"{col}_MIN"] = (col, 'min')
-
-    # 5. Duration-Based Aggregation
-    # For variables like leaf wetness, sum the number of hours it was wet:
-    # LEAFW (Leaf Wetness) → Total hours per day where leaf wetness was detected
-    if 'LEAFW' in agg:
-        agg['LEAFW'] = lambda x: (x > 0).sum() # it gets applied to the pd.Series representing the day -> num. hours with LEAFW>0
-
+    for feature, aggfunction in aggregations.items():
+        if feature in agg: # if the feature exists in the df
+            agg[feature] = aggfunction
 
     daily_df = df.copy().resample('D').agg(agg)
 
+    max_min_agg = {}
+    for col in max_min_columns:
+        if col in df.columns: 
+            max_min_agg[f"{col}_MAX"] = (col, 'max')
+            max_min_agg[f"{col}_MIN"] = (col, 'min')
+
     if max_min_agg:
-        # print(max_min_agg)
-        # if you aggregate like df.agg(y=(col,aggfunction)) you transform the df
-        # to only have the new column 'y' with that aggregation.
+        # if you aggregate like df.agg(y=(col,aggfunction)) you transform the df to only have the new column 'y' with that aggregation.
         # We have max_min_agg = {
         # 'TAVG_MAX': ('TAVG', 'max'),
         # 'TAVG_MIN': ('TAVG', 'min'),
         # 'RHAVG_MAX': ('RHAVG', 'max'),
         # 'RHAVG_MIN': ('RHAVG', 'min')}
-        # In our case, we do df.agg(TAVG_MAX=('TAVG', 'max'),TAVG_MIN=...)
-        # to have the 4 new columns, and then we join the aggregated dataframes
+        # In our case, we do df.agg(TAVG_MAX=('TAVG', 'max'),TAVG_MIN=...) to have the 4 new columns, and then we join the aggregated dataframes
         df_max_min = df.copy().resample('D').agg(**max_min_agg)
-        # display(df_max_min)
-        # print(daily_df.columns,df_max_min.columns)
         daily_df = daily_df.join(df_max_min)
-        daily_df = daily_df.drop(columns=original_cols)
+
+        if not keep_splitted_columns:
+            daily_df = daily_df.drop(columns=[col for col in max_min_columns if col in df.columns])
 
     return daily_df
+
+def transform_traffic_to_daily_df(df:pd.DataFrame, size_hour_groups=0, **kwargs):
+    '''
+	`size_hour_groups` specifies how many hours to group and add as features.
+    If the value is 0, the whole day is averaged (same result if >= 24).
+    '''
+    # TODO facciamo vedere sta roba sul notebook 2? Direi di si :) ma non so dove
+    if size_hour_groups == 0:
+        return df.copy().resample('D').mean()
 
 # === PREPROCESSING ===
 def read_and_preprocess_dataset(datasets_folder, dataset, resample=False, fill_method='mfill', v=1):
@@ -111,7 +99,8 @@ def prepare_station_data_for_training(
         station_pollution_dict:dict,
         station_traffic_df:pd.DataFrame,
         weather_df:pd.DataFrame,
-        encoding_method = 'full-sin-cos'
+        encoding_method = 'full-sin-cos',
+        **kwargs,
 ):
     '''
 	Returns a dict mapping agents to their dataframe.\\
@@ -121,8 +110,10 @@ def prepare_station_data_for_training(
     for agent,agent_pollution_df in station_pollution_dict.items():
         # if the agent is daily (PM), resample traffic and weather df before merging.
         if agent in ('PM2.5','PM10'):
-            station_traffic_df = station_traffic_df.copy().resample('D').mean()
-            daily_weather_df = transform_weather_to_daily_df(weather_df.copy())
+            # TODO .max() maybe?
+            # or even better trasposing, eventually with binning
+            station_traffic_df = transform_traffic_to_daily_df(station_traffic_df, **kwargs)
+            daily_weather_df = transform_weather_to_daily_df(weather_df.copy(), **kwargs)
 
         merged_dict[agent] = join_datasets(
             agent_pollution_df,
