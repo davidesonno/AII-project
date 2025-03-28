@@ -105,14 +105,20 @@ def plot_time_series(dfs, value_column, date_column, legends, start_date=None, e
 
     for df, legend in zip(dfs, legends):
         if start_date and end_date:
-            df = df[(df[date_column] >= start_date) & (df[date_column] < end_date)]
+            if date_column is None: # use the index
+                df = df[(df.index >= start_date) & (df.index < end_date)]
+            else:
+                df = df[(df[date_column] >= start_date) & (df[date_column] < end_date)]
         
-        df = df.sort_values(date_column)
+        if date_column:
+            df = df.sort_values(date_column)
 
         if len(df) > max_rows:
             df = df.iloc[::downsample_factor]  
-
-        plt.plot(df[date_column], df[value_column], label=legend, linewidth=1)
+        if date_column:
+            plt.plot(df[date_column], df[value_column], label=legend, linewidth=1)
+        else:
+            plt.plot(df.index, df[value_column], label=legend, linewidth=1)
 
     plt.xlabel('Date')
     plt.ylabel('Value')

@@ -68,14 +68,29 @@ def transform_weather_to_daily_df(df:pd.DataFrame, aggregations={}, max_min_colu
 
     return daily_df
 
-def transform_traffic_to_daily_df(df:pd.DataFrame, size_hour_groups=0, **kwargs):
+def transform_traffic_to_daily_df(df:pd.DataFrame, bin_size=0, offset=0, **kwargs):
     '''
-	`size_hour_groups` specifies how many hours to group and add as features.
+	`bin_size` specifies how many hours to group and add as features.
     If the value is 0, the whole day is averaged (same result if >= 24).
     '''
-    # TODO facciamo vedere sta roba sul notebook 2? Direi di si :) ma non so dove
-    if size_hour_groups == 0:
-        return df.copy().resample('D').mean()
+    # TODO verificare se i nomi delle colonne nuovi danno fastidi da qualche parte
+    # non so se tipo ci sta qualcosa che accede specificatamente 'Traffic_value'
+    if bin_size == 0 or bin_size >= 24:
+        return df.copy().resample('D').mean().rename({'Value':'Traffic_value'})
+    
+    df_resampled = df.copy()
+    df_resampled.index = df_resampled.index + pd.Timedelta(hours=offset)
+
+# TODO offset is not quite right... check notebook... if you only provide a day
+# you should still only have one day, the values should not go into a new day
+# AND you would lose some values so it should be re-make better.
+# anyways with no offset it works.
+    df_resampled = df_resampled.resample(f'{bin_size}h').sum()
+    df_resampled['date'] = df_resampled.index.date
+    df_resampled['bin'] = ((df_resampled.index.hour - offset) % 24) // bin_size  # Correct bin calculation
+    daily_df = df_resampled.pivot_table(index='date', columns='bin', values='Traffic_value', aggfunc='sum')
+    daily_df.columns = [f'Traffic_{(i*bin_size+offset)%24}-{((i+1)*bin_size+offset)%24}' for i in daily_df.columns]
+    return daily_df
 
 # === PREPROCESSING ===
 def read_and_preprocess_dataset(datasets_folder, dataset, resample=False, fill_method='mfill', v=1):
@@ -110,15 +125,13 @@ def prepare_station_data_for_training(
     for agent,agent_pollution_df in station_pollution_dict.items():
         # if the agent is daily (PM), resample traffic and weather df before merging.
         if agent in ('PM2.5','PM10'):
-            # TODO .max() maybe?
-            # or even better trasposing, eventually with binning
-            station_traffic_df = transform_traffic_to_daily_df(station_traffic_df, **kwargs)
+            daily_traffic_df = transform_traffic_to_daily_df(station_traffic_df.copy(), **kwargs)
             daily_weather_df = transform_weather_to_daily_df(weather_df.copy(), **kwargs)
 
         merged_dict[agent] = join_datasets(
             agent_pollution_df,
-            station_traffic_df,
-            daily_weather_df if agent in ('PM2.5','PM10') else weather_df,
+            daily_traffic_df if agent in ('PM2.5','PM10') else station_traffic_df, # else it got copied (i think)
+            daily_weather_df if agent in ('PM2.5','PM10') else weather_df, # else it got copied (i think)
             dropna=True
         )
 

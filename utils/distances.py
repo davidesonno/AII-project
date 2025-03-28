@@ -54,14 +54,9 @@ def ecef_distance(lat1, lon1, lat2, lon2):
 
 def search_close_readings(df, center, radius, method=haversine):
     center_lat, center_lon = map(float, center.split(','))
-    
-    # Extract lat/lon values from 'geopoint' column
     lat_lon = np.array([list(map(float, gp.split(','))) for gp in df['geopoint']])
-    
-    # Compute all distances using Haversine formula (vectorized)
     distances = method(center_lat, center_lon, lat_lon[:, 0], lat_lon[:, 1])
     
-    # Return filtered DataFrame
     return df[distances <= radius]
 
 def divide_df_by_location(df, geopoint, radius, name=None, v=1):
