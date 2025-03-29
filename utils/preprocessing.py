@@ -68,29 +68,36 @@ def transform_weather_to_daily_df(df:pd.DataFrame, aggregations={}, max_min_colu
 
     return daily_df
 
-def transform_traffic_to_daily_df(df:pd.DataFrame, bin_size=0, offset=0, **kwargs):
+def transform_traffic_to_daily_df(df:pd.DataFrame, bin_size=0, offset=0, dropna=True, **kwargs):
     '''
 	`bin_size` specifies how many hours to group and add as features.
     If the value is 0, the whole day is averaged (same result if >= 24).
     '''
-    # TODO verificare se i nomi delle colonne nuovi danno fastidi da qualche parte
-    # non so se tipo ci sta qualcosa che accede specificatamente 'Traffic_value'
+    # TODO verificare se i nomi delle colonne nuovi danno fastidio da qualche parte
+    # non so se tipo ci sta qualcosa che accede specificatamente 'Traffic_value'~
+    if 24%bin_size != 0:
+        raise ValueError('bin_size should be a divisor of 24.')
     if bin_size == 0 or bin_size >= 24:
         return df.copy().resample('D').mean().rename({'Value':'Traffic_value'})
     
     df_resampled = df.copy()
-    df_resampled.index = df_resampled.index + pd.Timedelta(hours=offset)
+    df_resampled['bin'] = df.index.hour
+    df_resampled['bin'] = df_resampled['bin'].apply(lambda x: ((x-offset)%24)//bin_size)
+    df_resampled['aux'] = (df.index-timedelta(hours=offset)).date
 
-# TODO offset is not quite right... check notebook... if you only provide a day
-# you should still only have one day, the values should not go into a new day
-# AND you would lose some values so it should be re-make better.
-# anyways with no offset it works.
-    df_resampled = df_resampled.resample(f'{bin_size}h').sum()
-    df_resampled['date'] = df_resampled.index.date
-    df_resampled['bin'] = ((df_resampled.index.hour - offset) % 24) // bin_size  # Correct bin calculation
-    daily_df = df_resampled.pivot_table(index='date', columns='bin', values='Traffic_value', aggfunc='sum')
-    daily_df.columns = [f'Traffic_{(i*bin_size+offset)%24}-{((i+1)*bin_size+offset)%24}' for i in daily_df.columns]
-    return daily_df
+    df_resampled = df_resampled.reset_index()
+    df_resampled = df_resampled.drop(columns=['Date']).rename(columns={'aux':"Date"})
+    df_resampled = df_resampled.set_index('Date')
+
+    df_resampled = df_resampled.groupby(by=[df_resampled.index,'bin']).sum()
+    df_resampled = df_resampled.unstack(level="bin")
+
+    df_resampled.columns = [f"Traffic_{(i*bin_size+offset)%24}-{((i+1)*bin_size+offset-1)%23}" for i in range(24//bin_size)]
+
+    if dropna:
+        return df_resampled.dropna()
+    else:
+        return df_resampled
 
 # === PREPROCESSING ===
 def read_and_preprocess_dataset(datasets_folder, dataset, resample=False, fill_method='mfill', v=1):
