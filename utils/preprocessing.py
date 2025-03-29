@@ -100,7 +100,7 @@ def transform_traffic_to_daily_df(df:pd.DataFrame, bin_size=0, offset=0, dropna=
         return df_resampled
 
 # === PREPROCESSING ===
-def read_and_preprocess_dataset(datasets_folder, dataset, resample=False, fill_method='mfill', v=1):
+def read_and_preprocess_dataset(datasets_folder, dataset, resample=False, fill_method='mfill', radius=1, v=1):
     '''
 	`v=0` stops any output prints.
 	'''
@@ -109,7 +109,7 @@ def read_and_preprocess_dataset(datasets_folder, dataset, resample=False, fill_m
             return preprocess_pollution_dataset(os.path.join(datasets_folder,'pollution/pollution.csv'), resample=resample, fill_method=fill_method, v=v)
             
         case 'traffic':
-            return preprocess_traffic_dataset(os.path.join(datasets_folder,'traffic'), v=v)
+            return preprocess_traffic_dataset(os.path.join(datasets_folder,'traffic'), radius=radius, v=v)
 
         case 'weather':
             return preprocess_weather_dataset(os.path.join(datasets_folder,'weather'), v=v)
