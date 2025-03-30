@@ -33,9 +33,12 @@ def huber(y_true,y_pred):
 
 
 # === METRICS UTILITIES ===
-def display_metric_scores(metric_dict, start=''):
+def display_metric_scores(metric_dict, start='', round=None):
     for metric, score in metric_dict.items():
-        print(f'{start}- {metric}: {score}')
+        if round:
+            print(f'{start}- {metric}: {np.round(score,round)}')
+        else:
+            print(f'{start}- {metric}: {score}')
 
 def update_metrics(old_results, true_values, metrics):
     '''

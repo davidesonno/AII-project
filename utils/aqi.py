@@ -39,7 +39,7 @@ limits = {
     'O3': 180, 
     'NO2': 200, 
     'C6H6': 5
-    }
+}
 
 
 def compute_PM(value, agent):
@@ -126,52 +126,33 @@ def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoin
     return aqi
 
 
-def plot_AQI(station_dict, period, title ='',figsize=(20,5), s=None, e=None, ylims=None, plotly=False):
-    if period not in ('day', 'hour'): 
-        return ValueError(f'Period can only be `day` or `hour`. Got {period} instead')
-    hour = period == 'hour'
-    freq = '1h' if hour else 'D'
-    
-    agents = list(station_dict.keys())
-    aqi_df = station_dict[agents[0]].copy()
-    aqi_df.loc[:, 'agent'] = agents[0]
-    for key in agents[1:]:
-        aux = station_dict[key].copy()
-        if(len(aux) > 0): # if the aqi is hourly but pm is excluded the pm df is empty
-            aux.loc[:, 'agent'] = key
-            aqi_df = pd.concat([aqi_df, aux])
-    if s and e:
-        aqi_df = aqi_df[(aqi_df.index>=s)&(aqi_df.index<=e)]
-    elif s:
-        aqi_df = aqi_df[(aqi_df.index>=s)]
-    elif e:
-        aqi_df = aqi_df[(aqi_df.index<=e)]
+def plot_AQI(station_AQI, title ='',figsize=(20,5), s=None, e=None, ylims=None, cmap=None):   
+    if isinstance(station_AQI,dict):
+        station_AQI = [station_AQI]
+    if isinstance(title,dict):
+        title = [title]
 
-    if(len(aqi_df) == 0):
-        print('Empty dataframe... check the date range!')
-        return
+    hour = (station_AQI[0].index[1] - station_AQI[0].index[0]) < pd.Timedelta(hours=23)
 
-    aqi_df = aqi_df.fillna(-np.inf)
-    aqi_df = aqi_df.sort_values(['AQI']) # why?
-    aqi_df = aqi_df.reset_index()
-    aqi_df = aqi_df.drop_duplicates(subset='Date', keep='last')
-    aqi_df = aqi_df.set_index('Date')
-    aqi_df = aqi_df.resample(freq).max()
-    aqi_df.loc[:, 'agent'] = aqi_df['agent'].fillna('missing')
-    agents = aqi_df['agent'].unique()
-    
-    if plotly:
-        import plotly.express as px
-        if ylims: pass #idk how to
-        fig = px.bar(aqi_df.reset_index(), x='Date', y='AQI', color='agent', title=title)
-        fig.update_layout(height=400)
-        fig.show()
-    else:
+    for aqi,titl in zip(station_AQI,title):
+        if s and e:
+            aqi_to_plot = aqi.copy()[(aqi.index>=s)&(aqi.index<=e)]
+        elif s:
+            aqi_to_plot = aqi.copy()[(aqi.index>=s)]
+        elif e:
+            aqi_to_plot = aqi.copy()[(aqi.index<=e)]
+
         plt.figure(figsize=figsize)
-        for _, segment in aqi_df.groupby('agent'):
-            plt.bar(segment.index, segment['AQI'], label=f'{segment["agent"].iloc[0]}',width=0.03 if hour else 0.9)
-        if ylims:
+        is_diff_AQI = np.sum(aqi_to_plot['AQI'] < 0) # if there are negative values is probably a difference aqi
+                
+        cmap = plt.get_cmap('tab20b' if is_diff_AQI else 'Dark2')
+        colors = cmap(np.linspace(0, 1, len(aqi_to_plot['agent'].unique())))
+
+        for (i, (_, segment)) in enumerate(aqi_to_plot.groupby('agent')):
+            plt.bar(segment.index, segment['AQI'], label=f'{segment["agent"].iloc[0]}', color=colors[i], width=0.03 if hour else 0.9)
+        if ylims and not (is_diff_AQI):
             plt.ylim(ylims)
-        plt.title(title)
+        plt.title(titl)
         plt.legend(loc='upper left')
         plt.show()
+
