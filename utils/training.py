@@ -3,8 +3,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import copy
 import tensorflow as tf
+import random
 
 # === TRAINING UTILITIES ===
+
+def set_random_seed(seed=42):
+    np.random.seed(seed)
+    random.seed(seed)
+    tf.random.set_seed(seed)
+    
 def create_train_test(df, split_date, y):
     train = df[df.index <= split_date]
     test = df[df.index > split_date]
@@ -131,7 +138,7 @@ def create_sequences(x_df, time_steps=10):
         X.append(x_df.iloc[i:i+time_steps].values) # time_steps values are needed to predict the next value
     return np.array(X)
 
-def train_models(models, training_data, test_data, metrics=[], to_execute:list|dict='all', ignore:list|dict=None, v=1):
+def train_models(models, training_data, test_data, metrics=[], to_execute:list|dict='all', ignore:list|dict=None, random_state=42, v=1):
     '''
     Run all the models at once. 
 
@@ -198,9 +205,13 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
                     model_instance = model_generator(**model_params)
                     if v>0: print(f' >> Training station {station}...')
                     try:
+                        tf.keras.backend.clear_session()  
+                        set_random_seed(random_state)
                         model_instance.fit(x_train, y_train, **training_params, verbose=0)
                         predictions = model_instance.predict(x_test, verbose=0)
                     except TypeError:
+                        tf.keras.backend.clear_session()  
+                        set_random_seed(random_state)
                         model_instance.fit(x_train, y_train, **training_params)
                         predictions = model_instance.predict(x_test)
 
@@ -218,7 +229,7 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
 
     return results
 
-def train_agents(models, training_data, test_data, v=1):
+def train_agents(models, training_data, test_data, random_state=42, v=1):
     results = {station:{agent:[] for agent in agents} for station,agents in models.items()}
     for station, agents in models.items():
         for agent, model in agents.items():
@@ -243,9 +254,13 @@ def train_agents(models, training_data, test_data, v=1):
             model_instance = model_generator(**model_params)
             if v>0: print(f'Predicting {agent} in {station} using {model_desc}...')
             try:
+                tf.keras.backend.clear_session()  
+                set_random_seed(random_state)
                 model_instance.fit(x_train, y_train, **training_params, verbose=0)
                 predictions = model_instance.predict(x_test, verbose=0)
             except TypeError:
+                tf.keras.backend.clear_session()  
+                set_random_seed(random_state)
                 model_instance.fit(x_train, y_train, **training_params)
                 predictions = model_instance.predict(x_test)
 
