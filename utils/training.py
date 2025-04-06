@@ -135,11 +135,19 @@ def check_execution_values(to_execute, data, return_dict=False):
 
     return to_execute
 
-def create_sequences(x_df, time_steps=10):
+def create_sequences(x_df, y_df, time_steps):
     X = []
-    for i in range(len(x_df) - time_steps):
-        X.append(x_df.iloc[i:i+time_steps].values) # time_steps values are needed to predict the next value
-    return np.array(X)
+    y = []
+    resampled = x_df.copy().resample('1h').max()
+
+    for i in range(len(resampled) - time_steps + 1):
+        seq = resampled.iloc[i:i+time_steps]
+        if not (np.isnan(seq.values).all() or np.isnan(seq.iloc[-1].values).all()):
+            seq = pd.DataFrame(seq).ffill().bfill()
+            X.append(seq) # time_steps values are needed to predict the next value
+            y.append(y_df.loc[seq[-1:].index])
+
+    return np.array(X), pd.concat(y)
 
 def train_models(models, training_data, test_data, metrics=[], to_execute:list|dict='all', ignore:list|dict=None, random_state=42, v=1):
     '''
@@ -189,6 +197,7 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
                 if agent in training_data[station]:
                     x_train, y_train, x_test, y_test = training_data[station][agent]['x'],training_data[station][agent]['y'],test_data[station][agent]['x'],test_data[station][agent]['y']
                     model_generator, model_params, training_params, uses_sequences = models[model]
+                    if v>0: print(f' >> Training station {station}...')
                     if training_params is None:
                         training_params = {}
                     if uses_sequences:
@@ -196,17 +205,15 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
                             raise KeyError('No `time_steps` key found in the model parameters to compute the sequences')
                         ts = model_params['time_steps']
 
-                        x_test = pd.concat([x_train.iloc[-ts:],x_test]) # add the needed values
+                        x_test = pd.concat([x_train.iloc[-ts+1:],x_test]) # add the needed values
 
-                        x_train = create_sequences(x_train, ts)
-                        y_train = y_train.iloc[ts:]
+                        x_train, y_train = create_sequences(x_train, y_train, ts)
 
-                        x_test = create_sequences(x_test, ts)
+                        x_test, y_test = create_sequences(x_test, y_test, ts)
                     else: # if not using sequences, flatten
                         y_train = y_train.to_numpy().ravel()
 
                     model_instance = model_generator(**model_params)
-                    if v>0: print(f' >> Training station {station}...')
                     try:
                         tf.keras.backend.clear_session()  
                         set_random_seed(random_state)
@@ -238,6 +245,7 @@ def train_agents(models, training_data, test_data, random_state=42, v=1):
         for agent, model in agents.items():
             x_train, y_train, x_test, y_test = training_data[station][agent]['x'],training_data[station][agent]['y'],test_data[station][agent]['x'],test_data[station][agent]['y']
             model_desc,model_generator, model_params, training_params, uses_sequences = model
+            if v>0: print(f'Predicting {agent} in {station} using {model_desc}...')
             if training_params is None:
                 training_params = {}
             if uses_sequences:
@@ -245,17 +253,15 @@ def train_agents(models, training_data, test_data, random_state=42, v=1):
                     raise KeyError('No `time_steps` key found in the model parameters to compute the sequences')
                 ts = model_params['time_steps']
 
-                x_test = pd.concat([x_train.iloc[-ts:],x_test]) # add the needed values
+                x_test = pd.concat([x_train.iloc[-ts+1:],x_test]) # add the needed values
 
-                x_train = create_sequences(x_train, ts)
-                y_train = y_train.iloc[ts:]
+                x_train, y_train = create_sequences(x_train, y_train, ts)
 
-                x_test = create_sequences(x_test, ts)
+                x_test, y_test = create_sequences(x_test, y_test, ts)
             else: # if not using sequences, flatten
                 y_train = y_train.to_numpy().ravel()
 
             model_instance = model_generator(**model_params)
-            if v>0: print(f'Predicting {agent} in {station} using {model_desc}...')
             try:
                 tf.keras.backend.clear_session()  
                 set_random_seed(random_state)

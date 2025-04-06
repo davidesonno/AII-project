@@ -1,9 +1,8 @@
-from datetime import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
 import os
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 # === FILE READING ==
 def merge_csv_to_dataframe(input_folder, v=1, **kwargs):
@@ -90,6 +89,7 @@ def normalize_columns(df:pd.DataFrame, columns:list=[], skip:list=[]):
     If no columns are specified, all the columns are attempted to be scaled.
     '''
     scaler = MinMaxScaler()
+    scaler = StandardScaler()
     if not columns:
         columns = df.columns
     

@@ -1,6 +1,8 @@
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from .training import display_metric_scores
 
     #https://forum.airnowtech.org/t/the-aqi-equation/169
 CONC = { 
@@ -13,7 +15,7 @@ CONC = {
         'HI':[54, 154, 254, 354, 424, 604]
         },
     'O3':{
-        'LO':[0, 125, 165, 205, 405], # I add to add a lower bound
+        'LO':[0, 125, 165, 205, 405], # I had to add a lower bound
         'HI':[124, 164, 204, 404, 604] # I also added a starting value here
         }
 }
@@ -33,10 +35,10 @@ AQI ={
 }
 
 limits = {
-    'PM2.5': 25,
+    'PM2.5': 40,
     'PM10': 50, 
     'CO': 10, 
-    'O3': 180, 
+    'O3': 120, 
     'NO2': 200, 
     'C6H6': 5
 }
@@ -60,9 +62,7 @@ def compute_PM(value, agent):
         # does this ever happen? if it is 0 why nan, should we keep 0?
         return np.nan
 
-import pandas as pd
-
-def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoints=True, include_hourly_pm=True):
+def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoints=False, include_hourly_pm=True):
     if period not in ('day', 'hour'): 
         return ValueError(f'Period can only be `day` or `hour`. Got {period} instead')
     if limit is None:
@@ -101,16 +101,16 @@ def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoin
             aqi = aqi.drop(columns=[value_column])
 
         # Average agents
-        if agent in ('O3', 'NO2', 'C6H6'):
+        if agent in ('NO2', 'C6H6'):
             aqi = aqi.resample('D').mean()
-            if agent == 'O3' and breakpoints:
+            if agent == 'O3' and breakpoints: # TODO eventually move it boelow
                 aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
             else:
                 aqi['AQI'] = aqi[value_column] / limit * 100
             aqi = aqi.drop(columns=[value_column])
 
         # MaSsImA dElLe MeDiE mObIlI sU 8 oRe
-        if agent == 'CO':
+        if agent in ('O3','CO'):
             aqi = aqi.resample('1h').max()
 
             def rolling_average(day):
@@ -156,3 +156,84 @@ def plot_AQI(station_AQI, title ='',figsize=(20,5), s=None, e=None, ylims=None, 
         plt.legend(loc='upper left')
         plt.show()
 
+
+def merge_AQIs(AQI_dict, period):
+    if period not in ('day', 'hour'): 
+        return ValueError(f'Period can only be `day` or `hour`. Got {period} instead')
+    hour = period == 'hour'
+    freq = '1h' if hour else 'D'
+
+    station_AQIs = {}
+    for station in AQI_dict.keys():
+        agents = list(AQI_dict[station].keys())
+        aqi_df = AQI_dict[station][agents[0]].copy()
+        
+        aqi_df.loc[:, 'agent'] = agents[0]
+        for key in agents[1:]:
+            aux = AQI_dict[station][key].copy()
+            if(len(aux) > 0): # if the aqi is hourly but pm is excluded the pm df is empty
+                aux.loc[:, 'agent'] = key
+                aqi_df = pd.concat([aqi_df, aux])
+
+        if(len(aqi_df) == 0):
+            print('Empty dataframe... check the date range!')
+            return
+
+        aqi_df = aqi_df.fillna(-np.inf)
+        aqi_df = aqi_df.sort_values(['AQI']) # why?
+        aqi_df = aqi_df.reset_index()
+        aqi_df = aqi_df.drop_duplicates(subset='Date', keep='last')
+        aqi_df = aqi_df.set_index('Date')
+        aqi_df = aqi_df.resample(freq).max()
+        aqi_df.loc[:, 'agent'] = aqi_df['agent'].fillna('missing')
+
+        station_AQIs[station] = aqi_df
+        
+    return station_AQIs
+
+def AQI_difference(pred, true):
+    diff = pd.DataFrame(pred['AQI'] - true['AQI'])
+    diff['agent'] = (pred['agent'] == true['agent']
+                        ).astype(int).apply(lambda x: 'Same agent' if x else 'Different agents')
+    
+    return diff
+
+def print_AQI_difference_metrics(AQI_diff):
+    positive_avg = AQI_diff[AQI_diff['AQI'] > 0]['AQI'].mean()
+    negative_avg = AQI_diff[AQI_diff['AQI'] < 0]['AQI'].mean()
+    absolute_mean = AQI_diff['AQI'].abs().mean()
+    agent_percentage = AQI_diff['agent'].value_counts(normalize=True) * 100
+    positive_percentage = (AQI_diff['AQI'] > 0).mean() * 100
+    negative_percentage = (AQI_diff['AQI'] < 0).mean() * 100
+
+    print(f"> Absolute Mean AQI Difference: {absolute_mean:.2f}")
+    print(f"> Positive Average AQI Difference: {positive_avg:.2f}")
+    print(f"> Negative Average AQI Difference: {negative_avg:.2f}")
+    print(f"> Percentage of Positive Differences: {positive_percentage:.2f}%")
+    print(f"> Percentage of Negative Differences: {negative_percentage:.2f}%")
+    print("> Percentage of Agent Values:")
+    display_metric_scores(agent_percentage.to_dict(), start='   ', round=2)
+
+
+categories = {
+    'Good': 0,
+    'Moderate': 50,
+    'Poor': 100,
+    'Very Poor': 150,
+    'Severe': 200,
+}
+
+def map_category(value, categories):
+    for category, up_bound in reversed(list(categories.items())):
+        if value > up_bound:
+            return category
+
+def print_AQI_category_comparison(pred_AQI, true_AQI, categories):
+    pred_categories = pred_AQI['AQI'].copy().dropna().apply(map_category, categories=categories)
+    true_categories = true_AQI['AQI'].copy().dropna().apply(map_category, categories=categories)
+    
+    cm = confusion_matrix(true_categories, pred_categories, labels=list(categories.keys()),normalize='all')
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=list(categories.keys()))
+    disp.plot(cmap=plt.cm.Blues)
+    plt.title(f'AQI Categories Predictions ({cm.trace():.2f}% correct)')
+    plt.show()
