@@ -89,7 +89,7 @@ def normalize_columns(df:pd.DataFrame, columns:list=[], skip:list=[]):
     If no columns are specified, all the columns are attempted to be scaled.
     '''
     scaler = MinMaxScaler()
-    scaler = StandardScaler()
+    # scaler = StandardScaler()
     if not columns:
         columns = df.columns
     

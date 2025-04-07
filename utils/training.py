@@ -135,7 +135,7 @@ def check_execution_values(to_execute, data, return_dict=False):
 
     return to_execute
 
-def create_sequences(x_df, y_df, time_steps):
+def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0):
     X = []
     y = []
     resampled = x_df.copy().resample('1h').max()
@@ -143,7 +143,10 @@ def create_sequences(x_df, y_df, time_steps):
     for i in range(len(resampled) - time_steps + 1):
         seq = resampled.iloc[i:i+time_steps]
         if not (np.isnan(seq.values).all() or np.isnan(seq.iloc[-1].values).all()):
-            seq = pd.DataFrame(seq).ffill().bfill()
+            if use_mask:
+                seq = pd.DataFrame(seq).ffill().bfill()
+            else:
+                seq = seq.fillna(mask_value)
             X.append(seq) # time_steps values are needed to predict the next value
             y.append(y_df.loc[seq[-1:].index])
 
@@ -206,10 +209,11 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
                         ts = model_params['time_steps']
 
                         x_test = pd.concat([x_train.iloc[-ts+1:],x_test]) # add the needed values
+                        
+                        use_mask = model_params.get('use_mask', False)
+                        x_train, y_train = create_sequences(x_train, y_train, ts, use_mask=use_mask)
 
-                        x_train, y_train = create_sequences(x_train, y_train, ts)
-
-                        x_test, y_test = create_sequences(x_test, y_test, ts)
+                        x_test, y_test = create_sequences(x_test, y_test, ts, use_mask=use_mask)
                     else: # if not using sequences, flatten
                         y_train = y_train.to_numpy().ravel()
 
@@ -255,9 +259,10 @@ def train_agents(models, training_data, test_data, random_state=42, v=1):
 
                 x_test = pd.concat([x_train.iloc[-ts+1:],x_test]) # add the needed values
 
-                x_train, y_train = create_sequences(x_train, y_train, ts)
+                use_mask = model_params.get('use_mask', False)
+                x_train, y_train = create_sequences(x_train, y_train, ts, use_mask=use_mask)
 
-                x_test, y_test = create_sequences(x_test, y_test, ts)
+                x_test, y_test = create_sequences(x_test, y_test, ts, use_mask=use_mask)
             else: # if not using sequences, flatten
                 y_train = y_train.to_numpy().ravel()
 
