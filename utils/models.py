@@ -1,0 +1,124 @@
+from sklearn.ensemble import RandomForestRegressor
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Conv1D, GlobalAveragePooling1D, Masking, BatchNormalization
+from tensorflow.keras.optimizers import Adam
+import xgboost
+
+
+def build_lstm_model(
+        time_steps: int,
+        n_features: int,
+        lstm_units: int | list[int],
+        use_mask: bool,
+        mask_value= -999.0,
+        activation= 'relu',
+        optimizer= 'adam',
+        loss= 'mean_absolute_error'
+    ):
+    if isinstance(lstm_units, int):
+        lstm_units = [lstm_units]
+
+    model = []
+
+    if use_mask:
+        model.append(Masking(mask_value=mask_value, input_shape=(time_steps, n_features), name='initial_mask'))
+
+    for i, units in enumerate(lstm_units):
+        return_sequences = i < len(lstm_units) - 1
+
+        additional_params = {}
+        if not use_mask and i == 0:
+            additional_params['input_shape'] = (time_steps, n_features)
+
+        model.append(LSTM(units, return_sequences=return_sequences, **additional_params, name=f'LSTM_{i}'))
+        
+    model.extend([
+        Dense(32, activation=activation, name='classifier'),
+        Dense(1, name='classifier_head')
+    ])
+
+    model = Sequential(model)
+    model.compile(optimizer=optimizer, loss=loss)
+
+    return model
+
+def check_param(param, type, expected_len, name):
+    if isinstance(param, type):
+        param = [param] * expected_len
+    elif len(param) != expected_len:
+        raise ValueError(f'len: {len(param)} of `{name}` is different from expected len: {expected_len}')
+    return param
+
+def build_ffnn_model(
+        input_size: int,
+        neurons: int|list[int],
+        activation: str|list[str] = 'relu',
+        batch_norm: bool|list[bool] = False,
+        dropout: float|list[float] = 0.2,
+        optimizer = 'adam',
+        loss = 'mean_absolute_error'
+    ):
+    if isinstance(neurons, int):
+        neurons = [neurons]
+
+    num_layers = len(neurons)
+
+    dropout = check_param(dropout, float, num_layers, 'dropout')
+    activation = check_param(activation, str, num_layers, 'activation')
+    batch_norm = check_param(batch_norm, bool, num_layers, 'batch_norm')
+    
+    model = []
+
+    for i, (neurons_i, activation_i, batch_norm_i, dropout_i) in enumerate(zip(neurons, activation, batch_norm, dropout)):
+        additional_params = {}
+        if i == 0:
+            additional_params['input_shape'] = (input_size,)
+
+        model.append(Dense(neurons_i, activation=activation_i, **additional_params, name=f'dense_{i}'))
+        if batch_norm_i:
+            model.append(BatchNormalization(name=f'batch_norm_{i}'))
+        model.append(Dropout(dropout_i, name=f'dropout_{i}__{dropout_i}'))
+
+    model.append(Dense(1, name='classification_head'))
+    model = Sequential(model)
+    model.compile(optimizer=optimizer, loss=loss)
+
+    return model
+
+def build_conv_model(
+        time_steps: int,
+        n_features: int,
+        filters: int|list[int],
+        kernel_size: int|list[int] = 3,
+        activation: str|list[str] = 'relu',
+        padding: str|list[str] = 'same',
+        optimizer = 'adam',
+        loss = 'mean_absolute_error',
+):
+    if isinstance(filters, int):
+        filters = [filters]
+
+    num_layers = len(filters)
+
+    kernel_size = check_param(kernel_size, int, num_layers, 'kernel_size')
+    activation = check_param(activation, str, num_layers, 'activation')
+    padding = check_param(padding, str, num_layers, 'padding')
+
+    model = []
+    
+    for i, (filters_i, kernel_size_i, activation_i, padding_i) in enumerate(zip(filters, kernel_size, activation, padding)):
+        additional_params = {}
+        if i == 0:
+            additional_params['input_shape'] = (time_steps, n_features)
+
+        model.append(Conv1D(filters=filters_i, kernel_size=kernel_size_i, activation=activation_i, padding=padding_i, **additional_params, name=f'conv1d_{i}_k-{kernel_size_i}_p-{padding_i}'))
+
+    model.extend([
+        GlobalAveragePooling1D(name='global_avg_pool'),
+        Dense(64, activation='relu', name='classifier'),
+        Dense(1, name='classification_head')
+    ])
+    model = Sequential(model)
+    model.compile(optimizer=optimizer, loss=loss)
+
+    return model
