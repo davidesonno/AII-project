@@ -73,9 +73,7 @@ def transform_traffic_to_daily_df(df:pd.DataFrame, bin_size=0, offset=0, dropna=
 	`bin_size` specifies how many hours to group and add as features.
     If the value is 0, the whole day is averaged (same result if >= 24).
     '''
-    # TODO verificare se i nomi delle colonne nuovi danno fastidio da qualche parte
-    # non so se tipo ci sta qualcosa che accede specificatamente 'Traffic_value'~
-    if 24%bin_size != 0:
+    if 24 % bin_size != 0:
         raise ValueError('bin_size should be a divisor of 24.')
     if bin_size == 0 or bin_size >= 24:
         return df.copy().resample('D').mean().rename({'Value':'Traffic_value'})
@@ -103,6 +101,8 @@ def transform_traffic_to_daily_df(df:pd.DataFrame, bin_size=0, offset=0, dropna=
 def read_and_preprocess_dataset(datasets_folder, dataset, resample=False, fill_method='mfill', radius=1, v=1):
     '''
 	`v=0` stops any output prints.
+
+    Returns a dict of station: dict_of_agents
 	'''
     match dataset:
         case 'pollution':
@@ -134,7 +134,7 @@ def prepare_station_data_for_training(
         if agent in ('PM2.5','PM10'):
             daily_traffic_df = transform_traffic_to_daily_df(station_traffic_df.copy(), **kwargs)
             daily_weather_df = transform_weather_to_daily_df(weather_df.copy(), **kwargs)
-
+            
         merged_dict[agent] = join_datasets(
             agent_pollution_df,
             daily_traffic_df if agent in ('PM2.5','PM10') else station_traffic_df, # else it got copied (i think)

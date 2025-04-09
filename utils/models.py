@@ -6,31 +6,24 @@ import xgboost
 
 
 def build_lstm_model(
-        time_steps: int,
-        n_features: int,
-        lstm_units: int | list[int],
-        use_mask: bool,
-        mask_value= -999.0,
-        activation= 'relu',
-        optimizer= 'adam',
-        loss= 'mean_absolute_error'
-    ):
+    time_steps: int,
+    n_features: int,
+    lstm_units: int | list[int],
+    mask_value= -999.0,
+    activation= 'relu',
+    optimizer= 'adam',
+    loss= 'mean_absolute_error',
+    **kwargs
+):
     if isinstance(lstm_units, int):
         lstm_units = [lstm_units]
 
-    model = []
-
-    if use_mask:
-        model.append(Masking(mask_value=mask_value, input_shape=(time_steps, n_features), name='initial_mask'))
+    model = [Masking(mask_value=mask_value, input_shape=(time_steps, n_features), name='initial_mask')]
 
     for i, units in enumerate(lstm_units):
         return_sequences = i < len(lstm_units) - 1
 
-        additional_params = {}
-        if not use_mask and i == 0:
-            additional_params['input_shape'] = (time_steps, n_features)
-
-        model.append(LSTM(units, return_sequences=return_sequences, **additional_params, name=f'LSTM_{i}'))
+        model.append(LSTM(units, return_sequences=return_sequences, name=f'LSTM_{i}'))
         
     model.extend([
         Dense(32, activation=activation, name='classifier'),
@@ -50,14 +43,15 @@ def check_param(param, type, expected_len, name):
     return param
 
 def build_ffnn_model(
-        input_size: int,
-        neurons: int|list[int],
-        activation: str|list[str] = 'relu',
-        batch_norm: bool|list[bool] = False,
-        dropout: float|list[float] = 0.2,
-        optimizer = 'adam',
-        loss = 'mean_absolute_error'
-    ):
+    input_size: int,
+    neurons: int|list[int],
+    activation: str|list[str] = 'relu',
+    batch_norm: bool|list[bool] = False,
+    dropout: float|list[float] = 0.2,
+    optimizer = 'adam',
+    loss = 'mean_absolute_error',
+    **kwargs
+):
     if isinstance(neurons, int):
         neurons = [neurons]
 
@@ -77,7 +71,7 @@ def build_ffnn_model(
         model.append(Dense(neurons_i, activation=activation_i, **additional_params, name=f'dense_{i}'))
         if batch_norm_i:
             model.append(BatchNormalization(name=f'batch_norm_{i}'))
-        model.append(Dropout(dropout_i, name=f'dropout_{i}__{dropout_i}'))
+        model.append(Dropout(dropout_i, name=f'dropout_{i}_val_{dropout_i}'))
 
     model.append(Dense(1, name='classification_head'))
     model = Sequential(model)
@@ -86,14 +80,15 @@ def build_ffnn_model(
     return model
 
 def build_conv_model(
-        time_steps: int,
-        n_features: int,
-        filters: int|list[int],
-        kernel_size: int|list[int] = 3,
-        activation: str|list[str] = 'relu',
-        padding: str|list[str] = 'same',
-        optimizer = 'adam',
-        loss = 'mean_absolute_error',
+    time_steps: int,
+    n_features: int,
+    filters: int|list[int],
+    kernel_size: int|list[int] = 3,
+    activation: str|list[str] = 'relu',
+    padding: str|list[str] = 'same',
+    optimizer = 'adam',
+    loss = 'mean_absolute_error',
+    **kwargs
 ):
     if isinstance(filters, int):
         filters = [filters]
@@ -105,7 +100,7 @@ def build_conv_model(
     padding = check_param(padding, str, num_layers, 'padding')
 
     model = []
-    
+
     for i, (filters_i, kernel_size_i, activation_i, padding_i) in enumerate(zip(filters, kernel_size, activation, padding)):
         additional_params = {}
         if i == 0:

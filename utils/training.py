@@ -22,6 +22,12 @@ def create_train_test(df, split_date, y):
     y_train = train.drop(columns=[col for col in aux if col !=y])
     y_test = test.drop(columns=[col for col in aux if col !=y])
 
+    # Drop duplicated indexes, keeping the first occurrence
+    x_train = x_train[~x_train.index.duplicated(keep='first')]
+    x_test = x_test[~x_test.index.duplicated(keep='first')]
+    y_train = y_train[~y_train.index.duplicated(keep='first')]
+    y_test = y_test[~y_test.index.duplicated(keep='first')]
+
     return x_train,y_train,x_test,y_test
 
 # === METRICS ===
@@ -135,22 +141,52 @@ def check_execution_values(to_execute, data, return_dict=False):
 
     return to_execute
 
-def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0):
+def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, sliding_window=True):
+    '''
+	If `use_mask` a masking value is applied to the missing data, else `bfill()` is applied.
+    If `sliding_window` the sequences are a sliding window, else the input data is sliced evenly.
+    '''
     X = []
     y = []
     resampled = x_df.copy().resample('1h').max()
+    
+    if sliding_window:
+        for i in range(len(resampled) - time_steps + 1):
+            seq = resampled.iloc[i : i+time_steps]
+            if not (np.isnan(seq.values).all() or np.isnan(seq.iloc[-1].values).all()):
+                if use_mask:
+                    seq = seq.fillna(mask_value)
+                else:
+                    seq = pd.DataFrame(seq).ffill().bfill()
+                X.append(seq) # time_steps values are needed to predict the next value
+                y.append(y_df.loc[seq[-1:].index])
+    else: 
+        # add rows if the last hour is not 23:00
+        last_midnight = resampled.index[-1].normalize()
+        last_hour = last_midnight + pd.Timedelta(hours=23)
+        if resampled.index[-1] < last_hour:
+            filling_hours = pd.date_range(resampled.index[-1] + pd.Timedelta(hours=1), last_hour, freq='1h')
+            resampled = resampled.reindex(resampled.index.append(filling_hours))
+        for i in range(0, len(resampled), time_steps):
+            seq = resampled.iloc[i : i+time_steps]
+            if not (np.isnan(seq.values).all()):
+                if use_mask:
+                    seq = seq.fillna(mask_value)
+                else:
+                    seq = pd.DataFrame(seq).ffill().bfill()
+                idx = seq[:1].index.map(lambda x: x.date())
+                try:
+                    y_val = y_df.loc[idx] # try to see if y_df has the date
+                    if y_val.shape != (1,1):
+                        continue # on the dataset some readings arent precisely at midnight...
+                                 # so there might be two values per day 
+                    y.append(y_val)
+                    X.append(seq)
+                except: pass   
 
-    for i in range(len(resampled) - time_steps + 1):
-        seq = resampled.iloc[i:i+time_steps]
-        if not (np.isnan(seq.values).all() or np.isnan(seq.iloc[-1].values).all()):
-            if use_mask:
-                seq = pd.DataFrame(seq).ffill().bfill()
-            else:
-                seq = seq.fillna(mask_value)
-            X.append(seq) # time_steps values are needed to predict the next value
-            y.append(y_df.loc[seq[-1:].index])
-
-    return np.array(X), pd.concat(y)
+    X = np.array(X)
+    y = pd.concat(y)
+    return X, y
 
 def train_models(models, training_data, test_data, metrics=[], to_execute:list|dict='all', ignore:list|dict=None, random_state=42, v=1):
     '''
