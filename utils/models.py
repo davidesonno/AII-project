@@ -117,3 +117,100 @@ def build_conv_model(
     model.compile(optimizer=optimizer, loss=loss)
 
     return model
+
+# === SELECTED MODELS ===
+def get_models(n_hour_features, n_daily_features):
+    # hour models
+    lstm_params = {
+        'time_steps': 3,
+        'n_features': n_hour_features,
+        'lstm_units': 128,
+        'optimizer': Adam(learning_rate=1e-3),
+        'loss': 'mean_absolute_error',
+        'use_mask': True
+    }
+    lstm_train_params = {
+        'epochs': 20,
+        'batch_size': 64
+    }
+    lstm = ('LSTM-masked', build_lstm_model, lstm_params, lstm_train_params, True)
+    lstm2_params = {
+    'time_steps': 5,
+    'n_features': n_hour_features,
+    'lstm_units': [64, 32],
+    'optimizer': Adam(learning_rate=1e-3),
+    'loss': 'mean_squared_error',
+    'use_mask': True
+    }
+    lstm2_train_params = {
+        'epochs': 20,
+        'batch_size': 32,
+    }
+    lstm2 = ('LSTM_2-masked', build_lstm_model, lstm2_params, lstm2_train_params, True)
+    ffnn_params = {
+        'input_size': n_hour_features,
+        'neurons': [1024, 512, 256, 128],
+        'dropout': 0.2,
+        'optimizer': Adam(learning_rate=1e-2),
+        'loss': 'mean_absolute_error'
+    }
+    ffnn_train_params = {
+        'epochs': 10,
+        'batch_size': 32,
+    }
+    FFNN = ('Feed Forward NN', build_ffnn_model, ffnn_params, ffnn_train_params, False)
+    conv_params = {
+        'time_steps': 8,
+        'n_features': n_hour_features,
+        'filters': 64,
+        'optimizer': Adam(learning_rate=3e-3),
+        'loss': 'mean_absolute_error'
+    }
+    conv_train_params = {
+        'epochs': 10,
+        'batch_size': 64,
+    }
+    conv1d = ('Conv1D', build_conv_model, conv_params, conv_train_params, True)
+
+    # daily models
+    ffnn_daily_params = {
+        'input_size': n_daily_features,
+        'neurons': [1024, 512, 256, 128],
+        'optimizer': Adam(learning_rate=3e-4),
+        'loss': 'mean_absolute_error'
+    }
+    ffnn_daily_train_params = {
+        'epochs':20,
+        'batch_size':32,
+    }
+    FFNN_daily = ('Feed Forward NN', build_ffnn_model, ffnn_daily_params, ffnn_daily_train_params, False)
+    rfr_params = {
+        'n_estimators':100,
+        'max_depth':10,
+        'min_samples_leaf': 5,
+        'max_features': 'log2',
+    }
+    rfr = ('Random Forest Regressor', RandomForestRegressor, rfr_params, None, False)
+
+    models = {
+        'GIARDINI MARGHERITA':{
+            'NO2': lstm, 
+            'O3': lstm2,
+            'PM10':rfr,
+            'PM2.5':FFNN_daily 
+        },
+        'PORTA SAN FELICE':{
+            'C6H6': lstm, 
+            'CO': FFNN, 
+            'NO2': conv1d,
+            'PM10':FFNN_daily,  
+            'PM2.5':FFNN_daily 
+        },
+        'VIA CHIARINI':{
+            'NO2': FFNN, 
+            'O3': lstm2, 
+            'PM10':FFNN_daily  
+        }
+    }
+
+    return models

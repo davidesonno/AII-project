@@ -1,9 +1,15 @@
+import shutil
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
 import tensorflow as tf
 import random
+import os
+import xgboost as xgb
+import joblib
+
+
 
 # === TRAINING UTILITIES ===
 
@@ -188,6 +194,52 @@ def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, s
     y = pd.concat(y)
     return X, y
 
+
+def save_model(model, folder, station, agent):
+    station = station.replace(' ','_')
+    agent = agent.replace('.','_')
+    filename = os.path.join(folder, station+'.'+agent)
+
+    if isinstance(model, tf.keras.Model):
+        model.save(f'{filename}') # cant make it work with just .h5 :(
+    elif isinstance(model, xgb.XGBModel):
+        model.save_model(f'{filename}.json')
+    else:
+        joblib.dump(model, f'{filename}.pkl')
+
+def load_models(folder):
+    models = {}
+
+    for filename in os.listdir(folder):
+        if filename.endswith(('.h5', '.json', '.pkl')) or os.path.isdir(os.path.join(folder, filename)):
+            parts = filename.split('.')
+            if len(parts) > 2:
+                station = parts[0]
+                agent = '.'.join(parts[1:])
+            else:
+                station, agent = parts
+
+            station = station.replace('_',' ')
+
+            if station not in models:
+                models[station] = {}
+
+            print(f"Loading model: {station}.{agent}")
+            agent = agent.split('.')[0].replace('_','.')
+
+            if os.path.isdir(os.path.join(folder, filename)):
+                models[station][agent] = tf.keras.models.load_model(os.path.join(folder, filename))
+            elif filename.endswith('.json'):
+                model = xgb.XGBModel()
+                model.load_model(os.path.join(folder, filename))
+                models[station][agent] = model
+            elif filename.endswith('.pkl'):
+                models[station][agent] = joblib.load(os.path.join(folder, filename))
+    
+    return models
+
+# === TRAINING FUNCTIONS ===
+
 def train_models(models, training_data, test_data, metrics=[], to_execute:list|dict='all', ignore:list|dict=None, random_state=42, v=1):
     '''
     Run all the models at once. 
@@ -279,12 +331,21 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
 
     return results
 
-def train_agents(models, training_data, test_data, random_state=42, v=1):
+def train_agents(models, training_data, test_data, model_out_folder=None, random_state=42, v=1):
+    if model_out_folder:
+        os.makedirs(model_out_folder, exist_ok=True)
+        for filename in os.listdir(model_out_folder):
+            file_path = os.path.join(model_out_folder, filename)
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        
     results = {station:{agent:[] for agent in agents} for station,agents in models.items()}
     for station, agents in models.items():
         for agent, model in agents.items():
             x_train, y_train, x_test, y_test = training_data[station][agent]['x'],training_data[station][agent]['y'],test_data[station][agent]['x'],test_data[station][agent]['y']
-            model_desc,model_generator, model_params, training_params, uses_sequences = model
+            model_desc, model_generator, model_params, training_params, uses_sequences = model
             if v>0: print(f'Predicting {agent} in {station} using {model_desc}...')
             if training_params is None:
                 training_params = {}
@@ -313,6 +374,9 @@ def train_agents(models, training_data, test_data, random_state=42, v=1):
                 set_random_seed(random_state)
                 model_instance.fit(x_train, y_train, **training_params)
                 predictions = model_instance.predict(x_test)
+
+            if model_out_folder:
+                save_model(model_instance, model_out_folder, station, agent)
 
             predictions = pd.DataFrame(predictions, index=y_test.index, columns=['Agent_value'])
 
