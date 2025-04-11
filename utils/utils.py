@@ -268,4 +268,4 @@ def plot_dataframe(data, labels=None, vmin=-1.96, vmax=1.96,
                 color=plt.get_cmap('tab10')(labels))
     plt.tight_layout()
 
-    
+
