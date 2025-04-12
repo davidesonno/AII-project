@@ -204,7 +204,7 @@ def save_model(model, folder, station, agent):
         model.save(f'{filename}') # cant make it work with just .h5 :(
     elif isinstance(model, xgb.XGBModel):
         model.save_model(f'{filename}.json')
-    else:
+    else: # rfr
         joblib.dump(model, f'{filename}.pkl')
 
 def load_models(folder):

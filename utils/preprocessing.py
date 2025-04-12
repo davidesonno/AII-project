@@ -152,6 +152,8 @@ def prepare_station_data_for_training(
     encoded_dict = {}
     for agent, normalized_agent_dict in normalized_dict.items():
         encoded_dict[agent] = encode_date_index(normalized_agent_dict, method=encoding_method)
+        if agent in ('PM2.5','PM10'):
+            encoded_dict[agent] = encoded_dict[agent].drop(columns=['hour_sin', 'hour_cos'])
 
     return encoded_dict
 
