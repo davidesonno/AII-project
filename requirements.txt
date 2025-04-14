@@ -1,6 +1,6 @@
+# setuptools==58.0.4
 pandas
-numpy
-scikit-learn
+scikit-learn==1.4.2
 matplotlib
 seaborn
 ipykernel
@@ -8,3 +8,8 @@ statsmodels
 geopy
 xgboost
 jinja2
+tensorflow==2.10
+requests
+tqdm
+numpy<2.0
+shap

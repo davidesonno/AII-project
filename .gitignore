@@ -1,3 +1,5 @@
 /datasets
 *.pyc
 /models
+/models-informative
+/.venv

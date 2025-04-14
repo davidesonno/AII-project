@@ -228,7 +228,11 @@ def load_models(folder):
             agent = agent.split('.')[0].replace('_','.')
 
             if os.path.isdir(os.path.join(folder, filename)):
-                models[station][agent] = tf.keras.models.load_model(os.path.join(folder, filename))
+                try:
+                    models[station][agent] = tf.keras.models.load_model(os.path.join(folder, filename))
+                except ValueError:
+                    models[station][agent] = tf.keras.layers.TFSMLayer(os.path.join(folder, filename), call_endpoint='serving_default')
+
             elif filename.endswith('.json'):
                 model = xgb.XGBModel()
                 model.load_model(os.path.join(folder, filename))
