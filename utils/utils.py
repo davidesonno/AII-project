@@ -99,6 +99,21 @@ def normalize_columns(df:pd.DataFrame, columns:list=[], skip:list=[]):
     
     return aux
 
+def extract_ordered_features_by_shap(nested_data, data):
+    result = {}
+    for station, agents in nested_data.items():
+        result[station] = {}
+        for agent, info in agents.items():
+            shap_values = info['shap_values']
+            
+            values = np.abs(shap_values).mean(axis=0)
+            feature_names = data[station][agent]['x'].columns
+            sorted_indices = np.argsort(-values)
+            ordered_features = [feature_names[i] for i in sorted_indices]
+            result[station][agent] = ordered_features
+
+    return result
+
 # === PLOTS ===
 def plot_time_series(dfs, value_column, date_column, legends, start_date=None, end_date=None, max_rows=5000, downsample_factor=8, title=''):
     plt.figure(figsize=(40, 6))

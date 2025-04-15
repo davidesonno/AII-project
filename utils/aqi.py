@@ -239,9 +239,9 @@ def print_AQI_category_comparison(pred_AQI, true_AQI, categories):
     plt.show()
 
 def compute_AQI_and_show_analysis(predictions_dict, true_values_dict, categories=AQI_CATEGORIES):
-    pred_AQIs_daily = {s: {agent: get_AQI(predictions_dict[s][agent], agent=agent, period='day', value_column='Agent_value',) for agent in predictions_dict[s].keys()} for s in predictions_dict}
+    pred_AQIs_daily = {s: {agent: get_AQI(predictions_dict[s][agent]['predictions'], agent=agent, period='day', value_column='Agent_value',) for agent in predictions_dict[s].keys()} for s in predictions_dict}
     pred_AQI_daily = merge_AQIs(pred_AQIs_daily, period='day')
-    pred_AQIs_hourly = {s: {agent: get_AQI(predictions_dict[s][agent],agent=agent,period='hour', value_column='Agent_value',include_hourly_pm=False) for agent in predictions_dict[s].keys()} for s in predictions_dict}
+    pred_AQIs_hourly = {s: {agent: get_AQI(predictions_dict[s][agent]['predictions'],agent=agent,period='hour', value_column='Agent_value',include_hourly_pm=False) for agent in predictions_dict[s].keys()} for s in predictions_dict}
     pred_AQI_hourly = merge_AQIs(pred_AQIs_hourly, period='hour')
     true_AQIs_daily = {s: {agent: get_AQI(true_values_dict[s][agent]['y'], agent=agent, period='day', value_column='Agent_value',) for agent in true_values_dict[s].keys()} for s in true_values_dict}
     true_AQI_daily = merge_AQIs(true_AQIs_daily, period='day')

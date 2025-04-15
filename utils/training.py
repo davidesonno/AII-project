@@ -10,7 +10,6 @@ import xgboost as xgb
 import joblib
 
 
-
 # === TRAINING UTILITIES ===
 
 def set_random_seed(seed=42):
@@ -37,12 +36,16 @@ def create_train_test(df, split_date, y):
     return x_train,y_train,x_test,y_test
 
 # === METRICS ===
+from sklearn.metrics import root_mean_squared_error, r2_score, mean_absolute_error
+
+
 def log_cosh_loss(y_true, y_pred):
     return tf.reduce_mean(tf.math.log(tf.cosh(y_pred - y_true)))
 
 def huber(y_true,y_pred):
     return tf.keras.losses.Huber(delta=0.2)(y_true,y_pred).numpy()
 
+METRICS = [root_mean_squared_error, r2_score, mean_absolute_error, huber]
 
 # === METRICS UTILITIES ===
 def display_metric_scores(metric_dict, start='', round=None):
@@ -55,24 +58,43 @@ def display_metric_scores(metric_dict, start='', round=None):
 def update_metrics(old_results, true_values, metrics):
     '''
     Computes new metric values for the predicted data.
+
+    - If the value of the agent key is a dict containing a dict that maps model name
+    to the predictions and metrics, update the metrics dict.
+    - If the value of the agent key are the predictions, returns a new dict with 
+    the scores of the station-agent.
     '''
     new_results = copy.deepcopy(old_results)
     
     for station, station_results in new_results.items():
         for agent, agent_results in station_results.items():
-            for model, model_results in agent_results.items():
-                metric_scores = model_results['metric_scores']
-                predictions = model_results['predictions']
+            if isinstance(agent_results, dict):
+                for model, model_results in agent_results.items():
+                    metric_scores = model_results['metric_scores']
+                    predictions = model_results['predictions']
+                    for m in metrics:
+                        name = 'metric'
+                        try:
+                            name = m.__name__
+                        except: 
+                            name = type(m).__name__
+                            pass
+                        if name not in metric_scores:
+                            score = m(true_values[station][agent]['y'], predictions)
+                            metric_scores[name] = score
+            else:
+                metric_scores = {}
                 for m in metrics:
-                    name = 'loss'
+                    name = 'metric'
                     try:
                         name = m.__name__
                     except: 
                         name = type(m).__name__
                         pass
-                    if name not in metric_scores:
-                        score = m(true_values[station][agent]['y'], predictions)
-                        metric_scores[name] = score
+                    score = m(true_values[station][agent]['y'], predictions)
+                    metric_scores[name] = score
+
+                new_results[station][agent] = metric_scores
 
     return new_results
 
@@ -325,8 +347,15 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
 
                     metric_scores = {}
                     for m in metrics:
-                        score = m(test_data[station][agent]['y'],predictions)
-                        metric_scores[m.__name__] = score
+                        name = 'metric'
+                        try:
+                            name = m.__name__
+                        except: 
+                            name = type(m).__name__
+                            pass
+                        score = m(test_data[station][agent]['y'], predictions)
+                        metric_scores[name] = score
+
 
                     if v>1:display_metric_scores(metric_scores,'\t')
 
@@ -335,7 +364,7 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
 
     return results
 
-def train_agents(models, training_data, test_data, model_out_folder=None, random_state=42, v=1):
+def train_agents(models, training_data, test_data, metrics=METRICS, model_out_folder=None, random_state=42, v=1):
     if model_out_folder:
         os.makedirs(model_out_folder, exist_ok=True)
         for filename in os.listdir(model_out_folder):
@@ -345,7 +374,7 @@ def train_agents(models, training_data, test_data, model_out_folder=None, random
             elif os.path.isdir(file_path):
                 shutil.rmtree(file_path)
         
-    results = {station:{agent:[] for agent in agents} for station,agents in models.items()}
+    results = {station:{agent:{} for agent in agents} for station,agents in models.items()}
     for station, agents in models.items():
         for agent, model in agents.items():
             x_train, y_train, x_test, y_test = training_data[station][agent]['x'],training_data[station][agent]['y'],test_data[station][agent]['x'],test_data[station][agent]['y']
@@ -383,26 +412,51 @@ def train_agents(models, training_data, test_data, model_out_folder=None, random
                 save_model(model_instance, model_out_folder, station, agent)
 
             predictions = pd.DataFrame(predictions, index=y_test.index, columns=['Agent_value'])
+            
+            metric_scores = {}
+            for m in metrics:
+                name = 'metric'
+                try:
+                    name = m.__name__
+                except: 
+                    name = type(m).__name__
+                    pass
+                score = m(test_data[station][agent]['y'], predictions)
+                metric_scores[name] = score
 
-            results[station][agent] = predictions
+
+            if v>1:display_metric_scores(metric_scores,'\t')
+
+            results[station][agent]['predictions'] = predictions
+            results[station][agent]['metric_scores'] = metric_scores
 
     return results
 
 
 # === RESULTS ===
-def extract_data(results):
+def training_results_to_dataframe(results, multiple_models=True):
     data = []
     names = []
-    for station, agents in results.items():
-        for agent, models in agents.items():
-            for model, values in models.items():
-                try:
-                    metrics = values["metric_scores"]
+    for station, station_dict in results.items():
+        for agent, agent_dict in station_dict.items():
+            if multiple_models:
+                for model, model_dict in agent_dict.items():
+                    try:
+                        metrics = model_dict["metric_scores"]
+                        names = metrics.keys()
+                        model_dict = metrics.values()
+                        data.append([station, agent, model] + list(model_dict))
+                    except: pass
+            else:
+                # try:
+                    metrics = agent_dict["metric_scores"]
                     names = metrics.keys()
-                    values = metrics.values()
-                    data.append([station, agent, model] + list(values))
-                except: pass
-    return pd.DataFrame(data, columns=["Station", "Agent", "Model"] + list(names))
+                    agent_dict = metrics.values()
+                    data.append([station, agent] + list(agent_dict))
+                # except: pass
+
+    return pd.DataFrame(data, columns=["Station", "Agent"] + (["Model"] if multiple_models else []) + list(names))
+
 
 # === PLOTS ===
 def plot_train_results(): pass
