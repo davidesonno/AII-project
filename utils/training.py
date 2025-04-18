@@ -187,7 +187,8 @@ def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, s
                 else:
                     seq = pd.DataFrame(seq).ffill().bfill()
                 X.append(seq) # time_steps values are needed to predict the next value
-                y.append(y_df.loc[seq[-1:].index])
+                y.append(y_df.copy().loc[seq[-1:].index])
+        y = pd.concat(y)
     else: 
         # add rows if the last hour is not 23:00
         last_midnight = resampled.index[-1].normalize()
@@ -202,18 +203,19 @@ def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, s
                     seq = seq.fillna(mask_value)
                 else:
                     seq = pd.DataFrame(seq).ffill().bfill()
-                idx = seq[:1].index.map(lambda x: x.date())
+                # idx = seq[:1].index.map(lambda x: x.date())
+                idx = seq[:1].index.tolist()[0]
+                # print(y_df.loc[idx])
                 try:
-                    y_val = y_df.loc[idx] # try to see if y_df has the date
-                    if y_val.shape != (1,1):
-                        continue # on the dataset some readings arent precisely at midnight...
+                    y_val = y_df.copy().loc[idx] # try to see if y_df has the date
+                    # if y_val.shape != (1,1):
+                        # continue # on the dataset some readings arent precisely at midnight...
                                  # so there might be two values per day 
                     y.append(y_val)
                     X.append(seq)
                 except: pass   
 
     X = np.array(X)
-    y = pd.concat(y)
     return X, y
 
 

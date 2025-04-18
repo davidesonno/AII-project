@@ -18,12 +18,16 @@ def build_lstm_model(
     if isinstance(lstm_units, int):
         lstm_units = [lstm_units]
 
-    model = [Masking(mask_value=mask_value, input_shape=(time_steps, n_features), name='initial_mask')]
+    model = []
+    if mask_value is not None:
+        model.append(Masking(mask_value=mask_value, input_shape=(time_steps, n_features), name='initial_mask'))
 
     for i, units in enumerate(lstm_units):
         return_sequences = i < len(lstm_units) - 1
-
-        model.append(LSTM(units, return_sequences=return_sequences, name=f'LSTM_{i}'))
+        if i==0 and mask_value is None:
+            model.append(LSTM(units, return_sequences=return_sequences, input_shape=(time_steps, n_features), name=f'LSTM_{i}'))
+        else:
+            model.append(LSTM(units, return_sequences=return_sequences, name=f'LSTM_{i}'))
         
     model.extend([
         Dense(32, activation=activation, name='classifier'),
