@@ -319,3 +319,36 @@ def plot_history(history, metrics=['loss']):
     plt.show()
 
 
+
+
+def plot_predictions(values, station_names, agent_names, dists=None, max_elements_per_plot=250, max_plots_per_station=5):
+    for station_id, agents in values.items():
+        num_agents = len(agents)
+        plot_count = min(num_agents, max_plots_per_station)
+
+        plt.figure(figsize=(15, 4 * plot_count))
+        plt.suptitle(f"Station {station_names[station_id]} - True vs Predicted", fontsize=16)
+
+        for i, (agent_id, data) in enumerate(agents.items()):
+            if i >= plot_count:
+                break
+            plt.subplot(plot_count, 1, i + 1)
+            true = data['true'][:min(max_elements_per_plot, len(data['true']))]
+            pred = data['pred'][:min(max_elements_per_plot, len(data['pred']))]
+            if dists:
+                mean = dists[agent_names[agent_id]][0]
+                std = dists[agent_names[agent_id]][1]
+                true = np.array(true)*std + mean
+                pred = np.array(pred)*std + mean
+            plt.plot(true, label='True', marker='o')
+            plt.plot(pred, label='Pred', marker='x')
+            plt.title(f"Agent: {agent_names[agent_id]}")
+            # plt.xlabel("Sample index")
+            plt.ylabel("Value")
+            plt.legend()
+
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.show()
+
+
+

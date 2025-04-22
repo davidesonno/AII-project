@@ -218,6 +218,30 @@ def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, s
     X = np.array(X)
     return X, y
 
+def split_dataset(ds, test_frac=0.15, val_frac=0.1, batch_size=32):
+    total_size = len(list(ds))  # you can also use len(h_keys) or h_ds_raw.cardinality()
+    test_size  = int(test_frac * total_size)
+    val_size   = int(val_frac * (total_size - test_size))  # Val split after test
+    train_size = total_size - test_size - val_size
+
+    # Split into test and train
+    test_ds = ds.take(test_size)
+    train_ds = ds.skip(test_size)
+
+    # Shuffle the train set
+    train_ds = train_ds.shuffle(train_size, seed=42)
+
+    # Now split train into train and validation
+    val_ds = train_ds.take(val_size)
+    train_ds = train_ds.skip(val_size)
+
+    return (
+        train_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE),
+        val_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE),
+        test_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    )
+
+
 
 def save_model(model, folder, station, agent):
     station = station.replace(' ','_')
