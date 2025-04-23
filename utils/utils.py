@@ -321,34 +321,36 @@ def plot_history(history, metrics=['loss']):
 
 
 
-def plot_predictions(values, station_names, agent_names, dists=None, max_elements_per_plot=250, max_plots_per_station=5):
-    for station_id, agents in values.items():
-        num_agents = len(agents)
+def plot_predictions(d_agent_values, dists=None, max_elements_per_plot=250, max_plots_per_station=5):
+    for station, agents_true in d_agent_values['true'].items():
+        agents_pred = d_agent_values['predictions'][station]
+        num_agents = len(agents_true)
         plot_count = min(num_agents, max_plots_per_station)
 
         plt.figure(figsize=(15, 4 * plot_count))
-        plt.suptitle(f"Station {station_names[station_id]} - True vs Predicted", fontsize=16)
+        plt.suptitle(f"Station {station} - True vs Predicted", fontsize=16)
 
-        for i, (agent_id, data) in enumerate(agents.items()):
+        for i, (agent, true_vals) in enumerate(agents_true.items()):
             if i >= plot_count:
                 break
-            plt.subplot(plot_count, 1, i + 1)
-            true = data['true'][:min(max_elements_per_plot, len(data['true']))]
-            pred = data['pred'][:min(max_elements_per_plot, len(data['pred']))]
+            pred_vals = agents_pred[agent]
+            true = true_vals[:min(max_elements_per_plot, len(true_vals))]
+            pred = pred_vals[:min(max_elements_per_plot, len(pred_vals))]
+
             if dists:
-                mean = dists[agent_names[agent_id]][0]
-                std = dists[agent_names[agent_id]][1]
-                true = np.array(true)*std + mean
-                pred = np.array(pred)*std + mean
+                mean = dists[agent][0]
+                std = dists[agent][1]
+                true = np.array(true) * std + mean
+                pred = np.array(pred) * std + mean
+
+            plt.subplot(plot_count, 1, i + 1)
             plt.plot(true, label='True', marker='o')
             plt.plot(pred, label='Pred', marker='x')
-            plt.title(f"Agent: {agent_names[agent_id]}")
-            # plt.xlabel("Sample index")
+            plt.title(f"Agent: {agent}")
             plt.ylabel("Value")
             plt.legend()
 
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         plt.show()
-
 
 

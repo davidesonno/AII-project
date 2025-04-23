@@ -218,22 +218,22 @@ def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, s
     X = np.array(X)
     return X, y
 
-def split_dataset(ds, test_frac=0.15, val_frac=0.1, batch_size=32):
-    total_size = len(list(ds))  # you can also use len(h_keys) or h_ds_raw.cardinality()
+def split_dataset(ds, test_frac=1/6, val_frac=0.1, batch_size=32):
+    total_size = len(list(ds))  # Make sure this is acceptable for your dataset size
     test_size  = int(test_frac * total_size)
-    val_size   = int(val_frac * (total_size - test_size))  # Val split after test
+    val_size   = int(val_frac * (total_size - test_size))  # Validation is from the training portion
     train_size = total_size - test_size - val_size
 
-    # Split into test and train
-    test_ds = ds.take(test_size)
-    train_ds = ds.skip(test_size)
+    # Get the training + validation portion (everything except last `test_size`)
+    trainval_ds = ds.take(total_size - test_size)
 
-    # Shuffle the train set
-    train_ds = train_ds.shuffle(train_size, seed=42)
+    # Get the test set as the last `test_size` samples
+    test_ds = ds.skip(total_size - test_size)
 
-    # Now split train into train and validation
-    val_ds = train_ds.take(val_size)
-    train_ds = train_ds.skip(val_size)
+    # Shuffle and split the training+validation
+    trainval_ds = trainval_ds.shuffle(train_size + val_size, seed=42)
+    val_ds = trainval_ds.take(val_size)
+    train_ds = trainval_ds.skip(val_size)
 
     return (
         train_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE),
