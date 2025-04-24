@@ -219,28 +219,33 @@ def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, s
     return X, y
 
 def split_dataset(ds, test_frac=1/6, val_frac=0.1, batch_size=32):
-    total_size = len(list(ds))  # Make sure this is acceptable for your dataset size
-    test_size  = int(test_frac * total_size)
-    val_size   = int(val_frac * (total_size - test_size))  # Validation is from the training portion
-    train_size = total_size - test_size - val_size
+    # Get the total size of the dataset
+    total_size = len(list(ds))  # List the entire dataset to get size (might be memory-intensive for large datasets)
+    
+    # Calculate the number of test samples
+    test_size = int(total_size * test_frac)
+    train_val_size = total_size - test_size
 
-    # Get the training + validation portion (everything except last `test_size`)
-    trainval_ds = ds.take(total_size - test_size)
+    # Split the dataset into train+val and test portions
+    train_val_dataset = ds.take(train_val_size)
+    test_dataset = ds.skip(train_val_size)
 
-    # Get the test set as the last `test_size` samples
-    test_ds = ds.skip(total_size - test_size)
+    # Shuffle train + val dataset and create static validation set
+    train_val_dataset = train_val_dataset.shuffle(train_val_size, reshuffle_each_iteration=False)
 
-    # Shuffle and split the training+validation
-    trainval_ds = trainval_ds.shuffle(train_size + val_size, seed=42)
-    val_ds = trainval_ds.take(val_size)
-    train_ds = trainval_ds.skip(val_size)
+    # Calculate the size of the validation set
+    val_size = int(val_frac * train_val_size)
 
-    return (
-        train_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE),
-        val_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE),
-        test_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-    )
+    # Split the train + val dataset into training and validation datasets
+    val_dataset = train_val_dataset.take(val_size)
+    train_dataset = train_val_dataset.skip(val_size)
 
+    # Batch and prefetch datasets for performance
+    train_dataset = train_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    test_dataset = test_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+    return train_dataset, val_dataset, test_dataset
 
 
 def save_model(model, folder, station, agent):

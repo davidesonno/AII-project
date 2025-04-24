@@ -294,25 +294,26 @@ def plot_history(history, metrics=['loss']):
     for idx, metric in enumerate(metrics):
         train_metric = history.history.get(metric, [])
         val_metric = history.history.get(f'val_{metric}', [])
-        
+        epochs = range(1, len(train_metric) + 1)
+
         if train_metric:
-            best_train_epoch = int(np.argmin(train_metric))
-            best_train_value = train_metric[best_train_epoch]
+            best_train_epoch = int(np.argmin(train_metric)) + 1
+            best_train_value = train_metric[best_train_epoch - 1]
             title_lines.append(f'Best Train {metric}: {best_train_value:.4f} (epoch {best_train_epoch})')
-            plt.plot(train_metric, label=f'Train {metric.capitalize()}', 
+            plt.plot(epochs, train_metric, label=f'Train {metric.capitalize()}', 
                      color=colors[idx % len(colors)], linestyle=linestyles[0], linewidth=2)
         
         if val_metric:
-            best_val_epoch = int(np.argmin(val_metric))
-            best_val_value = val_metric[best_val_epoch]
+            best_val_epoch = int(np.argmin(val_metric)) + 1
+            best_val_value = val_metric[best_val_epoch - 1]
             title_lines.append(f'Best Val {metric}: {best_val_value:.4f} (epoch {best_val_epoch})')
-            plt.plot(val_metric, label=f'Val {metric.capitalize()}', 
+            plt.plot(epochs, val_metric, label=f'Val {metric.capitalize()}', 
                      color=colors[idx % len(colors)], linestyle=linestyles[1], linewidth=2)
 
     plt.title('\n'.join(['Training History'] + title_lines), fontsize=14)
     plt.xlabel('Epoch', fontsize=12)
     plt.ylabel('Value', fontsize=12)
-    plt.xticks(ticks=range(len(history.history.get(metrics[0], []))))
+    plt.xticks(ticks=range(1, len(train_metric) + 1))
     plt.legend(loc='best', fontsize=10)
     plt.grid(True, linestyle='--', alpha=0.6)
     plt.tight_layout()
