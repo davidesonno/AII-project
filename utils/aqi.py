@@ -126,35 +126,63 @@ def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoin
     return aqi
 
 
-def plot_AQI(station_AQI, title ='',figsize=(20,5), s=None, e=None, ylims=None, cmap=None):   
-    if isinstance(station_AQI,dict):
+def plot_AQI(station_AQI, title='', figsize=(20, 5), s=None, e=None, ylims=None):
+    if isinstance(station_AQI, dict):
         station_AQI = [station_AQI]
-    if isinstance(title,dict):
+    if isinstance(title, str):
+        title = [title] * len(station_AQI)
+    elif isinstance(title, dict):
         title = [title]
 
     hour = (station_AQI[0].index[1] - station_AQI[0].index[0]) < pd.Timedelta(hours=23)
 
-    for aqi,titl in zip(station_AQI,title):
+    # Get consistent agent-color map from first two plots
+    consistent_agents = set()
+    for aqi in station_AQI[:2]:
+        consistent_agents.update(aqi['agent'].unique())
+
+    base_cmap = plt.get_cmap('Dark2')
+    base_colors = base_cmap(np.linspace(0, 1, len(consistent_agents)))
+    consistent_color_map = dict(zip(sorted(consistent_agents), base_colors))  # sorted for deterministic color assignment
+
+    num_plots = len(station_AQI)
+    fig, axs = plt.subplots(num_plots, 1, figsize=(figsize[0], figsize[1] * num_plots), sharex=True)
+    if num_plots == 1:
+        axs = [axs]
+
+    for i, (ax, aqi, titl) in enumerate(zip(axs, station_AQI, title)):
         if s and e:
-            aqi_to_plot = aqi.copy()[(aqi.index>=s)&(aqi.index<=e)]
+            aqi_to_plot = aqi.copy()[(aqi.index >= s) & (aqi.index <= e)]
         elif s:
-            aqi_to_plot = aqi.copy()[(aqi.index>=s)]
+            aqi_to_plot = aqi.copy()[(aqi.index >= s)]
         elif e:
-            aqi_to_plot = aqi.copy()[(aqi.index<=e)]
+            aqi_to_plot = aqi.copy()[(aqi.index <= e)]
+        else:
+            aqi_to_plot = aqi.copy()
 
-        plt.figure(figsize=figsize)
-        is_diff_AQI = np.sum(aqi_to_plot['AQI'] < 0) # if there are negative values is probably a difference aqi
-                
-        cmap = plt.get_cmap('tab20b' if is_diff_AQI else 'Dark2')
-        colors = cmap(np.linspace(0, 1, len(aqi_to_plot['agent'].unique())))
+        is_diff_AQI = np.sum(aqi_to_plot['AQI'] < 0)
+        hour_bar_width = 0.03 if hour else 0.9
 
-        for (i, (_, segment)) in enumerate(aqi_to_plot.groupby('agent')):
-            plt.bar(segment.index, segment['AQI'], label=f'{segment["agent"].iloc[0]}', color=colors[i], width=0.03 if hour else 0.9)
-        if ylims and not (is_diff_AQI):
-            plt.ylim(ylims)
-        plt.title(titl)
-        plt.legend(loc='upper left')
-        plt.show()
+        if i < 2:
+            # Use consistent colors
+            for agent, segment in aqi_to_plot.groupby('agent'):
+                color = consistent_color_map.get(agent, 'gray')
+                ax.bar(segment.index, segment['AQI'], label=agent, color=color, width=hour_bar_width)
+        else:
+            # Independent color mapping like original
+            cmap = plt.get_cmap('tab20b' if is_diff_AQI else 'Dark2')
+            unique_agents = aqi_to_plot['agent'].unique()
+            colors = cmap(np.linspace(0, 1, len(unique_agents)))
+            for color, (agent, segment) in zip(colors, aqi_to_plot.groupby('agent')):
+                ax.bar(segment.index, segment['AQI'], label=agent, color=color, width=hour_bar_width)
+
+        ax.set_title(titl)
+        if ylims and not is_diff_AQI:
+            ax.set_ylim(ylims)
+        ax.legend(loc='upper left')
+
+    plt.tight_layout()
+    plt.show()
 
 
 def merge_AQIs(AQI_dict, period):
