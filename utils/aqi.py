@@ -227,16 +227,23 @@ def map_category(value, categories):
     for category, up_bound in reversed(list(categories.items())):
         if value > up_bound:
             return category
+    return list(categories.keys())[0]
+
 
 def print_AQI_category_comparison(pred_AQI, true_AQI, categories):
-    pred_categories = pred_AQI['AQI'].copy().dropna().apply(map_category, categories=categories)
-    true_categories = true_AQI['AQI'].copy().dropna().apply(map_category, categories=categories)
-    
+    pred_AQI = pred_AQI['AQI'].copy().dropna()
+    true_AQI = true_AQI['AQI'].copy().dropna()
+    pred_categories = pred_AQI.apply(map_category, categories=categories)
+    true_categories = true_AQI.apply(map_category, categories=categories)
+    # print(pred_AQI[pred_categories.isna()])
+    # print(true_AQI[true_categories.isna()])
+
     cm = confusion_matrix(true_categories, pred_categories, labels=list(categories.keys()),normalize='all')
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=list(categories.keys()))
     disp.plot(cmap=plt.cm.Blues)
     plt.title(f'AQI Categories Predictions ({cm.trace():.2f}% correct)')
     plt.show()
+
 
 def compute_AQI_and_show_analysis(predictions_dict, true_values_dict, categories=AQI_CATEGORIES):
     pred_AQIs_daily = {s: {agent: get_AQI(predictions_dict[s][agent]['predictions'], agent=agent, period='day', value_column='Agent_value',) for agent in predictions_dict[s].keys()} for s in predictions_dict}

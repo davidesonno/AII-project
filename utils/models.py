@@ -218,3 +218,40 @@ def get_models(n_hour_features, n_daily_features):
     }
 
     return models
+
+
+def detailed_model_summary(model: tf.keras.Model):
+    print(f"\nModel: {model.name}")
+    print("="*80)
+    print(f"{'Layer (type)':<35}{'Output Shape':<30}{'Param #':<15}")
+    print("="*80)
+
+    total_params = 0
+
+    # Encoder
+    for layer in model.encoder.layers:
+        total_params += print_layer(layer)
+    print()
+
+    # Heads
+    for tid, head in zip(model.task_ids.numpy(), model.heads):
+        task_id = tid.decode("utf-8")  # decode tf.string to str
+        for layer in head.layers:
+            total_params += print_layer(layer, prefix=f"{task_id}_head.")
+        print()
+
+    print("="*80)
+    print(f"Total params: {total_params:,}")
+    print(f"Trainable params: {total_params:,}")
+    print(f"Non-trainable params: 0")
+    print("="*80)
+
+def print_layer(layer, prefix=""):
+    try:
+        output_shape = str(layer.output_shape)
+    except AttributeError:
+        output_shape = "?"
+    n_params = layer.count_params()
+    r = 35 - len(prefix)
+    print(f"{prefix}{layer.name:<{r}} {output_shape:<30} {n_params:<15}")
+    return n_params
