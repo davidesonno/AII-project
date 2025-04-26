@@ -220,7 +220,7 @@ def get_models(n_hour_features, n_daily_features):
     return models
 
 
-def detailed_model_summary(model: tf.keras.Model):
+def detailed_model_summary(model):
     print(f"\nModel: {model.name}")
     print("="*80)
     print(f"{'Layer (type)':<35}{'Output Shape':<30}{'Param #':<15}")
