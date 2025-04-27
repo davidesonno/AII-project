@@ -231,7 +231,7 @@ def split_dataset(ds, test_frac=1/6, val_frac=0.1, batch_size=32):
     test_dataset = ds.skip(train_val_size)
 
     # Shuffle train + val dataset and create static validation set
-    train_val_dataset = train_val_dataset.shuffle(train_val_size, reshuffle_each_iteration=False)
+    train_val_dataset = train_val_dataset.shuffle(train_val_size, reshuffle_each_iteration=False, seed=42)
 
     # Calculate the size of the validation set
     val_size = int(val_frac * train_val_size)
@@ -241,7 +241,7 @@ def split_dataset(ds, test_frac=1/6, val_frac=0.1, batch_size=32):
     train_dataset = train_val_dataset.skip(val_size)
 
     # Batch and prefetch datasets for performance
-    train_dataset = train_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    train_dataset = train_dataset.shuffle(train_val_size - val_size).batch(batch_size).prefetch(tf.data.AUTOTUNE)
     val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
     test_dataset = test_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
 

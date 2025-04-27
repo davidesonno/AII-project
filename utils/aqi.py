@@ -258,17 +258,18 @@ def map_category(value, categories):
     return list(categories.keys())[0]
 
 
-def print_AQI_category_comparison(pred_AQI, true_AQI, categories):
+def print_AQI_category_comparison(pred_AQI, true_AQI, categories, figsize=(10,10)):
     pred_AQI = pred_AQI['AQI'].copy().dropna()
     true_AQI = true_AQI['AQI'].copy().dropna()
     pred_categories = pred_AQI.apply(map_category, categories=categories)
     true_categories = true_AQI.apply(map_category, categories=categories)
-    # print(pred_AQI[pred_categories.isna()])
-    # print(true_AQI[true_categories.isna()])
 
-    cm = confusion_matrix(true_categories, pred_categories, labels=list(categories.keys()),normalize='all')
+    cm = confusion_matrix(true_categories, pred_categories, labels=list(categories.keys()), normalize='all')
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=list(categories.keys()))
-    disp.plot(cmap=plt.cm.Blues)
+    
+    fig, ax = plt.subplots(figsize=figsize)
+    disp.plot(cmap=plt.cm.Blues, ax=ax)
+    
     plt.title(f'AQI Categories Predictions ({cm.trace():.2f}% correct)')
     plt.show()
 
