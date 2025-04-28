@@ -52,7 +52,7 @@ def ecef_distance(lat1, lon1, lat2, lon2):
 
     return np.linalg.norm(p1 - p2, axis=0)  # Element-wise norm
 
-def search_close_readings(df, center, radius, method=haversine):
+def search_close_readings(df, center, radius, method=ecef_distance):
     center_lat, center_lon = map(float, center.split(','))
     lat_lon = np.array([list(map(float, gp.split(','))) for gp in df['geopoint']])
     distances = method(center_lat, center_lon, lat_lon[:, 0], lat_lon[:, 1])

@@ -126,7 +126,7 @@ def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoin
     return aqi
 
 
-def plot_AQI(station_AQI, title='', figsize=(20, 5), s=None, e=None, ylims=None):
+def plot_AQI(station_AQI, title='', categories=None, figsize=(20, 5), s=None, e=None, ylims=None):
     if isinstance(station_AQI, dict):
         station_AQI = [station_AQI]
     if isinstance(title, str):
@@ -168,6 +168,22 @@ def plot_AQI(station_AQI, title='', figsize=(20, 5), s=None, e=None, ylims=None)
             for agent, segment in aqi_to_plot.groupby('agent'):
                 color = consistent_color_map.get(agent, 'gray')
                 ax.bar(segment.index, segment['AQI'], label=agent, color=color, width=hour_bar_width)
+            if categories:
+                ymin, ymax = ax.get_ylim()
+                names = list(categories.keys())
+                for i, category in enumerate(names[:-1],1):
+                    value = categories[names[i]]
+                    if ymin <= value <= ymax:
+                        ax.axhline(y=value, color='black', linestyle='--', linewidth=0.8)
+                        ax.text(
+                            aqi_to_plot.index.min(), 
+                            value - 4*(ymax - ymin) * 0.01,  # slight dynamic shift
+                            f'{category} (< {value})',
+                            color='black', fontsize=8, verticalalignment='bottom',
+                            ha='right', va='center',
+                            bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
+                        )
+
         else:
             # Independent color mapping like original
             cmap = plt.get_cmap('tab20b' if is_diff_AQI else 'Dark2')
@@ -179,7 +195,7 @@ def plot_AQI(station_AQI, title='', figsize=(20, 5), s=None, e=None, ylims=None)
         ax.set_title(titl)
         if ylims and not is_diff_AQI:
             ax.set_ylim(ylims)
-        ax.legend(loc='upper left')
+        ax.legend(loc='upper right')
 
     plt.tight_layout()
     plt.show()
@@ -258,7 +274,7 @@ def map_category(value, categories):
     return list(categories.keys())[0]
 
 
-def print_AQI_category_comparison(pred_AQI, true_AQI, categories, figsize=(10,10)):
+def print_AQI_category_comparison(pred_AQI, true_AQI, categories, figsize=(6,6)):
     pred_AQI = pred_AQI['AQI'].copy().dropna()
     true_AQI = true_AQI['AQI'].copy().dropna()
     pred_categories = pred_AQI.apply(map_category, categories=categories)

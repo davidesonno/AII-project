@@ -13,3 +13,5 @@ requests
 tqdm
 numpy<2.0
 shap
+contextily
+geopandas
