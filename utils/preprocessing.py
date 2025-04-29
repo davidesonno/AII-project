@@ -143,11 +143,13 @@ def prepare_station_data_for_training(
         )
 
     normalized_dict = {}
+    agents_dist = {}
     for agent,merged_agent_df in merged_dict.items():
-        normalized_dict[agent] = normalize_columns(
+        normalized_dict[agent], dist = normalize_columns(
             merged_agent_df,
-            skip=['Agent_value']
+            return_dists=['Agent_value']
         )
+        agents_dist[agent] = dist['Agent_value']
 
     encoded_dict = {}
     for agent, normalized_agent_dict in normalized_dict.items():
@@ -155,7 +157,7 @@ def prepare_station_data_for_training(
         if agent in ('PM2.5','PM10'):
             encoded_dict[agent] = encoded_dict[agent].drop(columns=['hour_sin', 'hour_cos'])
 
-    return encoded_dict
+    return encoded_dict, agents_dist
 
 # === POLLUTION ===
 def preprocess_pollution_dataset(csv_path, fill_method, resample=False, v=1):

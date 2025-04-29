@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from datetime import datetime
 
 # === FILE READING ==
 def merge_csv_to_dataframe(input_folder, v=1, **kwargs):
@@ -82,21 +83,29 @@ def apply_accuracy_df(readings_df, accuracies_df, add_verified_col=False, max_mu
 
     return final_df
 
-def normalize_columns(df:pd.DataFrame, columns:list=[], skip:list=[]):
+def normalize_columns(df:pd.DataFrame, columns:list=[], skip:list=[], return_dists:list=[], scaler=StandardScaler()):
     '''
-	Appies `MinMaxScaler` to the specified columns, skipping `skip` columns.
+	Applies `scaler` to the specified columns, skipping `skip` columns.
     
-    If no columns are specified, all the columns are attempted to be scaled.
+    If no skip columns are specified, all the columns are attempted to be scaled.
+
+    If columns appear in `return_dist`, a dict with their mean and std will be returned.
     '''
-    scaler = MinMaxScaler()
-    # scaler = StandardScaler()
     if not columns:
         columns = df.columns
-    
-    columns_to_normalize = [col for col in columns if col not in skip]
+    dist_dict = {}
+
+    columns_to_normalize = [col for col in columns if (col not in skip) and (col not in return_dists)]
     aux = df.copy()
     aux[columns_to_normalize] = scaler.fit_transform(df[columns_to_normalize])
+    for col in return_dists:
+        mean = aux[col].mean()
+        std = aux[col].std()
+        aux[col] = (aux[col] - mean) / std
+        dist_dict[col] = {'mean':mean, 'std': std}
     
+    if len(dist_dict) > 0:
+        return aux, dist_dict
     return aux
 
 def extract_ordered_features_by_shap(nested_data, data):
@@ -354,4 +363,51 @@ def plot_predictions(d_agent_values, dists=None, max_elements_per_plot=250, max_
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         plt.show()
 
+
+def plot_months_predictions(y_true, y_pred, dist_dict=None, metrics=None, figsize=(17,8)):
+    plt.figure(figsize=figsize)
+    for month in range(1, 13):
+        start = datetime(2024, month, 1)
+        end = datetime(2024, month, 29 if month == 2 else 30 if month in [4, 6, 9, 11] else 31)
+        
+        plt.subplot(6, 2, month)
+        yt = y_true[(y_true.index >= start) & (y_true.index <= end)]
+        yp = y_pred[(y_pred.index >= start) & (y_pred.index <= end)]
+        if dist_dict:
+            yt = yt * dist_dict['std'] + dist_dict['mean']
+            yp = yp * dist_dict['std'] + dist_dict['mean']
+        plt.plot(yt, label='True values')
+        plt.plot(yp, label='Predicted values')
+        plt.title(f'{start.strftime("%B")}')
+        plt.xticks([])  # Remove x ticks
+        if month==1:plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+    if metrics:
+        for m in metrics:
+            score = m(y_true,y_pred)
+            print(f'{m.__name__}: {score}')
+
+
+def plot_year_predictions(y_true, y_pred, dist_dict=None, metrics=None, figsize=(15,3)):
+    start = datetime(2024,1,1)
+    end = datetime(2024,12,31)
+
+    plt.figure(figsize=figsize)
+    yt = y_true[(y_true.index >= start) & (y_true.index <= end)]
+    yp = y_pred[(y_pred.index >= start) & (y_pred.index <= end)]
+    if dist_dict:
+        yt = yt * dist_dict['std'] + dist_dict['mean']
+        yp = yp * dist_dict['std'] + dist_dict['mean']
+    plt.plot(yt, label='True values')
+    plt.plot(yp, label='Predicted values')
+    plt.legend()
+    plt.show()
+
+    if metrics:
+        for m in metrics:
+            rfr_score = m(y_true,y_pred)
+            print(f'{m.__name__}: {rfr_score}')
 

@@ -54,6 +54,7 @@ def build_ffnn_model(
     dropout: float|list[float] = 0.2,
     optimizer = 'adam',
     loss = 'mean_absolute_error',
+    seed=42,
     **kwargs
 ):
     if isinstance(neurons, int):
@@ -75,7 +76,7 @@ def build_ffnn_model(
         model.append(Dense(neurons_i, activation=activation_i, **additional_params, name=f'dense_{i}'))
         if batch_norm_i:
             model.append(BatchNormalization(name=f'batch_norm_{i}'))
-        model.append(Dropout(dropout_i, name=f'dropout_{i}_val_{dropout_i}'))
+        model.append(Dropout(dropout_i, name=f'dropout_{i}_val_{dropout_i}', seed=seed))
 
     model.append(Dense(1, name='classification_head'))
     model = Sequential(model)
@@ -188,6 +189,19 @@ def get_models(n_hour_features, n_daily_features):
         'batch_size':32,
     }
     FFNN_daily = ('Feed Forward NN', build_ffnn_model, ffnn_daily_params, ffnn_daily_train_params, False)
+    bn_ffnn_daily_params = {
+    'input_size': n_daily_features,
+    'neurons': [1024, 512, 256, 128],
+    'batch_norm': True,
+    'dropout': 0.2,
+    'optimizer': Adam(learning_rate=3e-4),
+    'loss': 'mean_absolute_error'
+    }   
+    bn_ffnn_daily_train_params = {
+        'epochs':20,
+        'batch_size':32,
+    }
+    FFNN_daily_BN = ('Feed Forward NN BatchNorm', build_ffnn_model, bn_ffnn_daily_params, bn_ffnn_daily_train_params, False)
     rfr_params = {
         'n_estimators':100,
         'max_depth':10,
@@ -201,7 +215,7 @@ def get_models(n_hour_features, n_daily_features):
             'NO2': lstm, 
             'O3': lstm2,
             'PM10':rfr,
-            'PM2.5':FFNN_daily 
+            'PM2.5':FFNN_daily_BN
         },
         'PORTA SAN FELICE':{
             'C6H6': lstm, 

@@ -4,6 +4,8 @@ import numpy as np
 
 def encode_date_index(df:pd.DataFrame, method='full-sin-cos'):
     '''
+    Using the given method, introduces new columns to encode the Date index.
+    
 	Assumes that the index is a datetime.
     '''
     if method is None:

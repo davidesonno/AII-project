@@ -218,35 +218,6 @@ def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, s
     X = np.array(X)
     return X, y
 
-def split_dataset(ds, test_frac=1/6, val_frac=0.1, batch_size=32):
-    # Get the total size of the dataset
-    total_size = len(list(ds))  # List the entire dataset to get size (might be memory-intensive for large datasets)
-    
-    # Calculate the number of test samples
-    test_size = int(total_size * test_frac)
-    train_val_size = total_size - test_size
-
-    # Split the dataset into train+val and test portions
-    train_val_dataset = ds.take(train_val_size)
-    test_dataset = ds.skip(train_val_size)
-
-    # Shuffle train + val dataset and create static validation set
-    train_val_dataset = train_val_dataset.shuffle(train_val_size, reshuffle_each_iteration=False, seed=42)
-
-    # Calculate the size of the validation set
-    val_size = int(val_frac * train_val_size)
-
-    # Split the train + val dataset into training and validation datasets
-    val_dataset = train_val_dataset.take(val_size)
-    train_dataset = train_val_dataset.skip(val_size)
-
-    # Batch and prefetch datasets for performance
-    train_dataset = train_dataset.shuffle(train_val_size - val_size).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-    val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-    test_dataset = test_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-
-    return train_dataset, val_dataset, test_dataset
-
 
 def save_model(model, folder, station, agent):
     station = station.replace(' ','_')
@@ -352,12 +323,11 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
                         if 'time_steps' not in model_params:
                             raise KeyError('No `time_steps` key found in the model parameters to compute the sequences')
                         ts = model_params['time_steps']
-
-                        x_test = pd.concat([x_train.iloc[-ts+1:],x_test]) # add the needed values
-                        
                         use_mask = model_params.get('use_mask', False)
-                        x_train, y_train = create_sequences(x_train, y_train, ts, use_mask=use_mask)
 
+                        x_test = pd.concat([x_train.iloc[-ts+1:],x_test]) # add the needed values                        
+
+                        x_train, y_train = create_sequences(x_train, y_train, ts, use_mask=use_mask)
                         x_test, y_test = create_sequences(x_test, y_test, ts, use_mask=use_mask)
                     else: # if not using sequences, flatten
                         y_train = y_train.to_numpy().ravel()
