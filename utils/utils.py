@@ -94,15 +94,15 @@ def normalize_columns(df:pd.DataFrame, columns:list=[], skip:list=[], return_dis
     if not columns:
         columns = df.columns
     dist_dict = {}
-
-    columns_to_normalize = [col for col in columns if (col not in skip) and (col not in return_dists)]
     aux = df.copy()
-    aux[columns_to_normalize] = scaler.fit_transform(df[columns_to_normalize])
+
     for col in return_dists:
         mean = aux[col].mean()
         std = aux[col].std()
-        aux[col] = (aux[col] - mean) / std
         dist_dict[col] = {'mean':mean, 'std': std}
+        
+    columns_to_normalize = [ col for col in columns if (col not in skip) ]
+    aux[columns_to_normalize] = scaler.fit_transform(df[columns_to_normalize])
     
     if len(dist_dict) > 0:
         return aux, dist_dict

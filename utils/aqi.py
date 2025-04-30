@@ -126,7 +126,7 @@ def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoin
     return aqi
 
 
-def plot_AQI(station_AQI, title='', categories=None, figsize=(20, 5), s=None, e=None, ylims=None):
+def plot_AQI(station_AQI, title='', categories=None, figsize=(20, 5), s=None, e=None, y_aspect='equal'):
     if isinstance(station_AQI, dict):
         station_AQI = [station_AQI]
     if isinstance(title, str):
@@ -136,7 +136,6 @@ def plot_AQI(station_AQI, title='', categories=None, figsize=(20, 5), s=None, e=
 
     hour = (station_AQI[0].index[1] - station_AQI[0].index[0]) < pd.Timedelta(hours=23)
 
-    # Get consistent agent-color map from first two plots
     consistent_agents = set()
     for aqi in station_AQI[:2]:
         consistent_agents.update(aqi['agent'].unique())
@@ -163,29 +162,27 @@ def plot_AQI(station_AQI, title='', categories=None, figsize=(20, 5), s=None, e=
         is_diff_AQI = np.sum(aqi_to_plot['AQI'] < 0)
         hour_bar_width = 0.03 if hour else 0.9
 
-        if i < 2:
-            # Use consistent colors
+        if i < 2: # aqi plots
             for agent, segment in aqi_to_plot.groupby('agent'):
                 color = consistent_color_map.get(agent, 'gray')
                 ax.bar(segment.index, segment['AQI'], label=agent, color=color, width=hour_bar_width)
             if categories:
                 ymin, ymax = ax.get_ylim()
                 names = list(categories.keys())
-                for i, category in enumerate(names[:-1],1):
+                for i, category in enumerate(names,0):
                     value = categories[names[i]]
                     if ymin <= value <= ymax:
                         ax.axhline(y=value, color='black', linestyle='--', linewidth=0.8)
                         ax.text(
-                            aqi_to_plot.index.min(), 
-                            value - 4*(ymax - ymin) * 0.01,  # slight dynamic shift
-                            f'{category} (< {value})',
+                            aqi_to_plot.index.max(), 
+                            value + (ymax - ymin) * 0.01,
+                            f'{category} (> {value})',
                             color='black', fontsize=8, verticalalignment='bottom',
-                            ha='right', va='center',
+                            ha='left', va='center',
                             bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
                         )
 
-        else:
-            # Independent color mapping like original
+        else: # diff plot
             cmap = plt.get_cmap('tab20b' if is_diff_AQI else 'Dark2')
             unique_agents = aqi_to_plot['agent'].unique()
             colors = cmap(np.linspace(0, 1, len(unique_agents)))
@@ -193,9 +190,11 @@ def plot_AQI(station_AQI, title='', categories=None, figsize=(20, 5), s=None, e=
                 ax.bar(segment.index, segment['AQI'], label=agent, color=color, width=hour_bar_width)
 
         ax.set_title(titl)
-        if ylims and not is_diff_AQI:
+        if y_aspect=='equal' and not is_diff_AQI and len(station_AQI) > 2:
+            ymax1, ymax2 = station_AQI[0].loc[s:e]['AQI'].max(), station_AQI[1].loc[s:e]['AQI'].max()
+            ylims = [0, max(ymax1, ymax2) + 5]
             ax.set_ylim(ylims)
-        ax.legend(loc='upper right')
+        ax.legend(loc='upper left')
 
     plt.tight_layout()
     plt.show()

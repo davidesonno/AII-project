@@ -258,7 +258,7 @@ def load_models(folder):
                     models[station][agent] = tf.keras.layers.TFSMLayer(os.path.join(folder, filename), call_endpoint='serving_default')
 
             elif filename.endswith('.json'):
-                model = xgb.XGBModel()
+                model = xgb.XGBRegressor()
                 model.load_model(os.path.join(folder, filename))
                 models[station][agent] = model
             elif filename.endswith('.pkl'):
