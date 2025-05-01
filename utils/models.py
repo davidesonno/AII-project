@@ -2,7 +2,7 @@ from sklearn.ensemble import RandomForestRegressor
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Conv1D, GlobalAveragePooling1D, Masking, BatchNormalization
 from tensorflow.keras.optimizers import Adam
-import xgboost
+import xgboost as xgb
 
 
 def build_lstm_model(
@@ -126,115 +126,66 @@ def build_conv_model(
 # === SELECTED MODELS ===
 def get_models(n_hour_features, n_daily_features):
     # hour models
-    lstm_params = {
-        'time_steps': 3,
-        'n_features': n_hour_features,
-        'lstm_units': 128,
-        'optimizer': Adam(learning_rate=1e-3),
-        'loss': 'mean_absolute_error',
-        'use_mask': True
-    }
-    lstm_train_params = {
-        'epochs': 20,
-        'batch_size': 64
-    }
+    xgbr_params = {'objective': "reg:absoluteerror",'n_estimators': 180,'max_depth': 6,'learning_rate': 0.07,'subsample': 0.9}
+    xgbr = ('XGB Regressor', xgb.XGBRegressor, xgbr_params, None, False)
+    lstm_params = {'time_steps': 3,'n_features': n_hour_features,'lstm_units': 128,'optimizer': Adam(learning_rate=1e-3),'loss': 'mean_absolute_error','use_mask': True}
+    lstm_train_params = {'epochs': 20,'batch_size': 64}
     lstm = ('LSTM-masked', build_lstm_model, lstm_params, lstm_train_params, True)
-    lstm2_params = {
-    'time_steps': 5,
-    'n_features': n_hour_features,
-    'lstm_units': [64, 32],
-    'optimizer': Adam(learning_rate=1e-3),
-    'loss': 'mean_squared_error',
-    'use_mask': True
-    }
-    lstm2_train_params = {
-        'epochs': 20,
-        'batch_size': 32,
-    }
-    lstm2 = ('LSTM_2-masked', build_lstm_model, lstm2_params, lstm2_train_params, True)
-    ffnn_params = {
-        'input_size': n_hour_features,
-        'neurons': [1024, 512, 256, 128],
-        'dropout': 0.2,
-        'optimizer': Adam(learning_rate=1e-2),
-        'loss': 'mean_absolute_error'
-    }
-    ffnn_train_params = {
-        'epochs': 10,
-        'batch_size': 32,
-    }
-    FFNN = ('Feed Forward NN', build_ffnn_model, ffnn_params, ffnn_train_params, False)
-    conv_params = {
-        'time_steps': 8,
-        'n_features': n_hour_features,
-        'filters': 64,
-        'optimizer': Adam(learning_rate=3e-3),
-        'loss': 'mean_absolute_error'
-    }
-    conv_train_params = {
-        'epochs': 10,
-        'batch_size': 64,
-    }
-    conv1d = ('Conv1D', build_conv_model, conv_params, conv_train_params, True)
-
+    bn_ffnn2_params = {'input_size': n_hour_features,'neurons': [512, 256, 128],'batch_norm': True,'dropout': 0.3,'optimizer': Adam(learning_rate=1e-2),'loss': 'mean_absolute_error'}
+    bn_ffnn2_train_params = {'epochs':10,'batch_size':32,}
+    FFNN2_BN = ('Feed Forward NN 2', build_ffnn_model, bn_ffnn2_params, bn_ffnn2_train_params, False)
+    conv_params = {'time_steps': 8,'n_features': n_hour_features,'filters': 64,'optimizer': Adam(learning_rate=3e-3),'loss': 'mean_absolute_error'}
+    conv_train_params = {'epochs': 10,'batch_size': 64}
+    conv = ('Conv1D', build_conv_model, conv_params, conv_train_params, True)
+    conv2_params = {'time_steps': 8,'n_features': n_hour_features,'filters': [64, 32],'optimizer': Adam(learning_rate=3e-3),'loss': 'mean_absolute_error'}
+    conv2_train_params = {'epochs': 10,'batch_size': 64,}
+    conv2 = ('Conv1D 2', build_conv_model, conv2_params, conv2_train_params, True)
+    conv3_params = {'time_steps': 8,'n_features': n_hour_features,'filters': [64, 32],'optimizer': Adam(learning_rate=3e-3),'loss': 'mean_absolute_error'}
+    conv3_train_params = {'epochs': 20,'batch_size': 32,}
+    conv3 = ('Conv1D 3', build_conv_model, conv3_params, conv3_train_params, True)
     # daily models
-    ffnn_daily_params = {
-        'input_size': n_daily_features,
-        'neurons': [1024, 512, 256, 128],
-        'optimizer': Adam(learning_rate=3e-4),
-        'loss': 'mean_absolute_error'
-    }
-    ffnn_daily_train_params = {
-        'epochs':20,
-        'batch_size':32,
-    }
+    ffnn_daily_params = {'input_size': n_daily_features,'neurons': [1024, 512, 256, 128],'optimizer': Adam(learning_rate=3e-4),'loss': 'mean_absolute_error'}
+    ffnn_daily_train_params = {'epochs':20,'batch_size':32}
     FFNN_daily = ('Feed Forward NN', build_ffnn_model, ffnn_daily_params, ffnn_daily_train_params, False)
-    bn_ffnn_daily_params = {
-    'input_size': n_daily_features,
-    'neurons': [1024, 512, 256, 128],
-    'batch_norm': True,
-    'dropout': 0.2,
-    'optimizer': Adam(learning_rate=3e-4),
-    'loss': 'mean_absolute_error'
-    }   
-    bn_ffnn_daily_train_params = {
-        'epochs':20,
-        'batch_size':32,
-    }
+    bn_ffnn_daily_params = {'input_size': n_daily_features,'neurons': [1024, 512, 256, 128],'batch_norm': True,'dropout': 0.2,'optimizer': Adam(learning_rate=3e-4),'loss': 'mean_absolute_error'}
+    bn_ffnn_daily_train_params = {'epochs':20,'batch_size':32,}
     FFNN_daily_BN = ('Feed Forward NN BatchNorm', build_ffnn_model, bn_ffnn_daily_params, bn_ffnn_daily_train_params, False)
-    rfr_params = {
-        'n_estimators':100,
-        'max_depth':10,
-        'min_samples_leaf': 5,
-        'max_features': 'log2',
-    }
-    rfr = ('Random Forest Regressor', RandomForestRegressor, rfr_params, None, False)
-
+    rfr2_params = {'n_estimators':150,'max_depth':20,'min_samples_leaf': 5,'max_features': 'log2'}
+    rfr2 = ('Random Forest Regressor 2', RandomForestRegressor, rfr2_params, None, False)
     models = {
         'GIARDINI MARGHERITA':{
-            'NO2': lstm, 
-            'O3': lstm2,
-            'PM10':rfr,
-            'PM2.5':FFNN_daily_BN
+            'NO2': conv2, 
+            'O3': conv3,
+            'PM10': rfr2,
+            'PM2.5': FFNN_daily 
         },
         'PORTA SAN FELICE':{
-            'C6H6': lstm, 
-            'CO': FFNN, 
-            'NO2': conv1d,
-            'PM10':FFNN_daily,  
-            'PM2.5':FFNN_daily 
+            'C6H6': conv, 
+            'CO': xgbr, 
+            'NO2': lstm,
+            'PM10':FFNN_daily_BN,  
+            'PM2.5':FFNN_daily_BN 
         },
         'VIA CHIARINI':{
-            'NO2': FFNN, 
-            'O3': lstm2, 
-            'PM10':FFNN_daily  
+            'NO2': FFNN2_BN, 
+            'O3': conv2, 
+            'PM10':rfr2  
         }
     }
-
     return models
 
 
 def detailed_model_summary(model):
+    def print_layer(layer, prefix=""):
+        try:
+            output_shape = str(layer.output_shape)
+        except AttributeError:
+            output_shape = "?"
+        n_params = layer.count_params()
+        r = 35 - len(prefix)
+        print(f"{prefix}{layer.name:<{r}} {output_shape:<30} {n_params:<15}")
+        return n_params
+    
     print(f"\nModel: {model.name}")
     print("="*80)
     print(f"{'Layer (type)':<35}{'Output Shape':<30}{'Param #':<15}")
@@ -260,12 +211,3 @@ def detailed_model_summary(model):
     print(f"Non-trainable params: 0")
     print("="*80)
 
-def print_layer(layer, prefix=""):
-    try:
-        output_shape = str(layer.output_shape)
-    except AttributeError:
-        output_shape = "?"
-    n_params = layer.count_params()
-    r = 35 - len(prefix)
-    print(f"{prefix}{layer.name:<{r}} {output_shape:<30} {n_params:<15}")
-    return n_params

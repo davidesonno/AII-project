@@ -173,6 +173,8 @@ def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, s
     '''
 	If `use_mask` a masking value is applied to the missing data, else `bfill()` is applied.
     If `sliding_window` the sequences are a sliding window, else the input data is sliced evenly.
+
+    The first (`time_steps` - 1) values will be skipped.
     '''
     X = []
     y = []
