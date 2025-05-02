@@ -1,6 +1,6 @@
 # Artificial Intelligence in Industry - project
 
-The aim of the project is to estimate air pollution according to the traffic and weather conditions. To do so, data from Bologna, Italy have been used.
+The aim of the project is to estimate air quality index according to the traffic and weather conditions. To do so, data from Bologna, Italy, have been used to train and test the models.
 
 ## Datasets
 
