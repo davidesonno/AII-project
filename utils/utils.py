@@ -330,47 +330,14 @@ def plot_history(history, metrics=['loss']):
 
 
 
-
-def plot_predictions(d_agent_values, dists=None, max_elements_per_plot=250, max_plots_per_station=5):
-    for station, agents_true in d_agent_values['true'].items():
-        agents_pred = d_agent_values['predictions'][station]
-        num_agents = len(agents_true)
-        plot_count = min(num_agents, max_plots_per_station)
-
-        plt.figure(figsize=(15, 4 * plot_count))
-        plt.suptitle(f"Station {station} - True vs Predicted", fontsize=16)
-
-        for i, (agent, true_vals) in enumerate(agents_true.items()):
-            if i >= plot_count:
-                break
-            pred_vals = agents_pred[agent]
-            true = true_vals[:min(max_elements_per_plot, len(true_vals))]
-            pred = pred_vals[:min(max_elements_per_plot, len(pred_vals))]
-
-            if dists:
-                mean = dists[agent][0]
-                std = dists[agent][1]
-                true = np.array(true) * std + mean
-                pred = np.array(pred) * std + mean
-
-            plt.subplot(plot_count, 1, i + 1)
-            plt.plot(true, label='True', marker='o')
-            plt.plot(pred, label='Pred', marker='x')
-            plt.title(f"Agent: {agent}")
-            plt.ylabel("Value")
-            plt.legend()
-
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-        plt.show()
-
-
-def plot_months_predictions(y_true, y_pred, dist_dict=None, metrics=None, figsize=(17,8)):
+def plot_months_predictions(y_true, y_pred, dist_dict=None, metrics=None, title='', figsize=(17,8), show=True):
     plt.figure(figsize=figsize)
     for month in range(1, 13):
         start = datetime(2024, month, 1)
         end = datetime(2024, month, 29 if month == 2 else 30 if month in [4, 6, 9, 11] else 31)
         
         plt.subplot(6, 2, month)
+        plt.suptitle(title)
         yt = y_true[(y_true.index >= start) & (y_true.index <= end)]
         yp = y_pred[(y_pred.index >= start) & (y_pred.index <= end)]
         if dist_dict:
@@ -382,8 +349,9 @@ def plot_months_predictions(y_true, y_pred, dist_dict=None, metrics=None, figsiz
         plt.xticks([])  # Remove x ticks
         if month==1:plt.legend()
 
-    plt.tight_layout()
-    plt.show()
+    if show:
+        plt.tight_layout()
+        plt.show()
 
     if metrics:
         for m in metrics:
@@ -410,4 +378,46 @@ def plot_year_predictions(y_true, y_pred, dist_dict=None, metrics=None, figsize=
         for m in metrics:
             rfr_score = m(y_true,y_pred)
             print(f'{m.__name__}: {rfr_score}')
+
+def plot_predictions(d_agent_values, dists=None, show_months=False):
+    if show_months:
+        for station, agents_true in d_agent_values['true'].items():
+            agents_pred = d_agent_values['predictions'][station]
+            num_agents = len(agents_true)
+
+            for i, (agent, true_vals) in enumerate(agents_true.items()):
+                pred_vals = agents_pred[agent]
+
+                if dists:
+                    mean = dists[agent][0]
+                    std = dists[agent][1]
+                    true_vals = true_vals.apply(lambda x:x* std + mean)
+                    pred_vals = pred_vals.apply(lambda x:x* std + mean)
+                plot_months_predictions(true_vals, pred_vals, title=f'{station}-{agent}')
+    else: 
+        for station, agents_true in d_agent_values['true'].items():
+            agents_pred = d_agent_values['predictions'][station]
+            num_agents = len(agents_true)
+
+            plt.figure(figsize=(15, 4 * num_agents))
+            plt.suptitle(f"Station {station} - True vs Predicted", fontsize=16)
+
+            for i, (agent, true_vals) in enumerate(agents_true.items()):
+                pred_vals = agents_pred[agent]
+
+                if dists:
+                    mean = dists[agent][0]
+                    std = dists[agent][1]
+                    true_vals = true_vals.apply(lambda x:x* std + mean)
+                    pred_vals = pred_vals.apply(lambda x:x* std + mean)
+
+                plt.subplot(num_agents, 1, i + 1)
+                plt.title(f"Agent: {agent}")
+                plt.plot(true_vals, label='True', marker='o')
+                plt.plot(pred_vals, label='Pred', marker='x')
+                plt.ylabel("Value")
+                plt.legend()
+
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
+            plt.show()
 
