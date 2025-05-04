@@ -367,6 +367,118 @@ def train_models(models, training_data, test_data, metrics=[], to_execute:list|d
 
     return results
 
+
+
+def train_models_1_per_agent(models, training_data, merged_training_data, test_data, metrics=[], to_execute:list|dict='all', ignore:list|dict=None, random_state=42, v=1):
+    '''
+    Run all the models at once. 
+
+	`to_execute` and `ignore` can be a list of agents to execute or ignore, respectively.
+    It could also be a dict with stations/agents/models to execute or ignore. If so, values can be lists or the string 'all'.
+    If a key is not present, all the possible values are used. e.g. if `stations` is missing, all the stations are executed.
+    The idea is to be able to chose what to execute or what not to execute. Anyways, both can be specified at the 
+    same time and will be merged.
+
+    NOTE: to specify models, use the same name that appears in `models` keys.
+
+    `v`=2 will print metric scores after each training.
+
+    Returns a dict:
+    ```
+    {   station: {  # Key: station identifier
+            agent: {  # Key: agent identifier
+                model: {  # Key: model identifier
+                    "prediction": predictions,
+                    "metric_scores": {
+                        metric: score 
+    }}}}}
+    ```
+    '''
+    # retrieve all the possible values for agents, STATIONS and models
+    agents = list(merged_training_data.keys())
+    stations = list(test_data.keys())
+    model_names = list(models.keys())
+
+    to_execute = prepare_execution_values(agents, stations, model_names, to_execute, ignore)
+    to_execute, results = check_execution_values(to_execute, test_data, return_dict=True)
+
+    if v>=0:
+        print('==================================================================================')
+        print('Train settings:')
+        for key, value in to_execute.items():
+            print(f'{key}: {value}')
+        print('==================================================================================')
+
+    for agent in to_execute['agents']:
+        if v>0: print(f'Agent {agent}')
+        for model in to_execute['models']:
+            if v>0: print(f'> {model} model')
+            if agent in merged_training_data:
+                x_train, y_train = merged_training_data[agent]['x'],merged_training_data[agent]['y']
+                x_test, y_test = None, None
+                model_generator, model_params, training_params, uses_sequences = models[model]
+                if training_params is None:
+                    training_params = {}
+                if uses_sequences:
+                    if 'time_steps' not in model_params:
+                        raise KeyError('No `time_steps` key found in the model parameters to compute the sequences')
+                    ts = model_params['time_steps']
+                    use_mask = model_params.get('use_mask', False)                     
+                    seq_x_train =None
+                    seq_y_train =None
+                    for station in training_data.keys():
+                        if agent in training_data[station].keys():
+                            x_train, y_train = create_sequences(training_data[station][agent]['x'], training_data[station][agent]['y'], ts, use_mask=use_mask)
+                            if seq_x_train is None:
+                                seq_x_train = x_train
+                                seq_y_train = y_train
+                            else:
+                                seq_x_train = np.concatenate((seq_x_train, x_train), axis=0)
+                                seq_y_train = np.concatenate((seq_y_train, y_train), axis=0)
+
+                            x_test = pd.concat([training_data[station][agent]['x'].iloc[-ts+1:], test_data[station][agent]['x']]) # to also compute the first days we need time_steps more days
+                            x_test, y_test = create_sequences(x_test, test_data[station][agent]['y'], ts, use_mask=False)
+
+                else: # if not using sequences, flatten
+                    y_train = y_train.to_numpy().ravel()
+
+                model_instance = model_generator(**model_params)
+                try:
+                    tf.keras.backend.clear_session()  
+                    set_random_seed(random_state)
+                    model_instance.fit(x_train, y_train, **training_params)
+                except TypeError:
+                    tf.keras.backend.clear_session()  
+                    set_random_seed(random_state)
+                    model_instance.fit(x_train, y_train, **training_params)
+
+
+            for station in to_execute['stations']:
+                if agent in test_data[station]:
+                    if not uses_sequences:
+                        x_test = test_data[station][agent]['x']
+                        y_test = test_data[station][agent]['y']
+                    predictions = model_instance.predict(x_test)
+                    predictions = pd.DataFrame(predictions, index=y_test.index, columns=['Agent_value'])
+                    metric_scores = {}
+                    for m in metrics:
+                        name = 'metric'
+                        try:
+                            name = m.__name__
+                        except: 
+                            name = type(m).__name__
+                            pass
+                        score = m(y_test, predictions)
+                        metric_scores[name] = score
+
+
+                    if v>1:display_metric_scores(metric_scores,'\t')
+
+                    results[station][agent][model]['predictions'] = predictions
+                    results[station][agent][model]['metric_scores'] = metric_scores
+
+    return results
+
 def train_agents(models, training_data, test_data, metrics=METRICS, model_out_folder=None, random_state=42, v=1):
     if model_out_folder:
         os.makedirs(model_out_folder, exist_ok=True)
