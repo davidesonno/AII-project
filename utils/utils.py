@@ -330,8 +330,14 @@ def plot_history(history, metrics=['loss']):
 
 
 
-def plot_months_predictions(y_true, y_pred, dist_dict=None, metrics=None, title='', figsize=(17,8), show=True):
+def plot_months_predictions(y_true, y_pred, dist_dict=None, metrics=None, yaspect='equal', title='', figsize=(17,8), show=True):
     plt.figure(figsize=figsize)
+    ymin = min(min(y_true.values), min(y_pred.values))
+    ymax = max(max(y_true.values), max(y_pred.values))
+    if dist_dict:
+        ymin = ymin * dist_dict['std'] + dist_dict['mean']
+        ymax = ymax * dist_dict['std'] + dist_dict['mean']
+
     for month in range(1, 13):
         start = datetime(2024, month, 1)
         end = datetime(2024, month, 29 if month == 2 else 30 if month in [4, 6, 9, 11] else 31)
@@ -346,7 +352,9 @@ def plot_months_predictions(y_true, y_pred, dist_dict=None, metrics=None, title=
         plt.plot(yt, label='True values')
         plt.plot(yp, label='Predicted values')
         plt.title(f'{start.strftime("%B")}')
-        plt.xticks([])  # Remove x ticks
+        plt.xticks([])
+        if yaspect == 'equal':
+            plt.ylim((ymin, ymax))
         if month==1:plt.legend()
 
     if show:
@@ -393,6 +401,7 @@ def plot_predictions(d_agent_values, dists=None, show_months=False):
                     std = dists[agent][1]
                     true_vals = true_vals.apply(lambda x:x* std + mean)
                     pred_vals = pred_vals.apply(lambda x:x* std + mean)
+
                 plot_months_predictions(true_vals, pred_vals, title=f'{station}-{agent}')
     else: 
         for station, agents_true in d_agent_values['true'].items():
