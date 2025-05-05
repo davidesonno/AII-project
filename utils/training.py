@@ -436,8 +436,6 @@ def train_models_1_per_agent(models, training_data, merged_training_data, test_d
                                 seq_x_train = np.concatenate((seq_x_train, x_train), axis=0)
                                 seq_y_train = np.concatenate((seq_y_train, y_train), axis=0)
 
-                            x_test = pd.concat([training_data[station][agent]['x'].iloc[-ts+1:], test_data[station][agent]['x']]) # to also compute the first days we need time_steps more days
-                            x_test, y_test = create_sequences(x_test, test_data[station][agent]['y'], ts, use_mask=False)
 
                 else: # if not using sequences, flatten
                     y_train = y_train.to_numpy().ravel()
@@ -446,7 +444,7 @@ def train_models_1_per_agent(models, training_data, merged_training_data, test_d
                 try:
                     tf.keras.backend.clear_session()  
                     set_random_seed(random_state)
-                    model_instance.fit(x_train, y_train, **training_params)
+                    model_instance.fit(x_train, y_train, **training_params, verbose=0)
                 except TypeError:
                     tf.keras.backend.clear_session()  
                     set_random_seed(random_state)
@@ -458,7 +456,15 @@ def train_models_1_per_agent(models, training_data, merged_training_data, test_d
                     if not uses_sequences:
                         x_test = test_data[station][agent]['x']
                         y_test = test_data[station][agent]['y']
-                    predictions = model_instance.predict(x_test)
+                    else:
+                        x_test = pd.concat([training_data[station][agent]['x'].iloc[-ts+1:], test_data[station][agent]['x']]) # to also compute the first days we need time_steps more days
+                        x_test, y_test = create_sequences(x_test, test_data[station][agent]['y'], ts, use_mask=False)
+                        
+                    try:
+                        predictions = model_instance.predict(x_test, verbose=0)
+                    except TypeError:
+                        predictions = model_instance.predict(x_test)
+
                     predictions = pd.DataFrame(predictions, index=y_test.index, columns=['Agent_value'])
                     metric_scores = {}
                     for m in metrics:
