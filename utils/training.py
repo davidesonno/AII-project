@@ -578,6 +578,49 @@ def training_results_to_dataframe(results, multiple_models=True):
 
     return pd.DataFrame(data, columns=["Station", "Agent"] + (["Model"] if multiple_models else []) + list(names))
 
+def extract_model_scores(results, test_sets):
+    extracted_data = {}
+    test_lenghts = {}
+
+    for station in results:
+        for agent in results[station]:
+            if agent not in extracted_data:
+                extracted_data[agent] = {}
+            if agent not in test_lenghts:
+                test_lenghts[agent] = 0
+            agent_len = len(test_sets[station][agent]['y'])
+            test_lenghts[agent] += agent_len
+            
+            for model in results[station][agent]:
+                if model not in extracted_data[agent]:
+                    extracted_data[agent][model] = {}
+
+                for metric, value in results[station][agent][model]['metric_scores'].items():
+                    if metric in ('r2_score'):
+                        continue
+                    if metric not in extracted_data[agent][model]:
+                        extracted_data[agent][model][metric] = 0.0
+                    denorm_value = 0
+                    denorm_value =  value * agent_len
+                    extracted_data[agent][model][metric] += denorm_value
+
+    for agent in extracted_data:
+        agent_len = test_lenghts[agent]
+        for model in extracted_data[agent]:
+            for metric in extracted_data[agent][model]:
+                extracted_data[agent][model][metric] /= agent_len   
+    
+    return extracted_data
+
+def extracted_scores_to_dataframe(data):
+    df_data = []
+    names = []
+    for agent, agent_dict in data.items():
+        for model, model_dict in agent_dict.items():
+            names = model_dict.keys()
+            df_data.append([agent, model] + list(model_dict.values()))
+
+    return pd.DataFrame(df_data, columns=["Agent", "Model"] + list(names)) 
 
 # === PLOTS ===
 def plot_train_results(): pass
