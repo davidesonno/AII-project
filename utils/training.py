@@ -36,16 +36,13 @@ def create_train_test(df, split_date, y):
     return x_train,y_train,x_test,y_test
 
 # === METRICS ===
-from sklearn.metrics import root_mean_squared_error, r2_score, mean_absolute_error
+from sklearn.metrics import root_mean_squared_error, r2_score, mean_absolute_error, mean_squared_error
 
 
 def log_cosh_loss(y_true, y_pred):
     return tf.reduce_mean(tf.math.log(tf.cosh(y_pred - y_true)))
 
-def huber(y_true,y_pred):
-    return tf.keras.losses.Huber(delta=0.2)(y_true,y_pred).numpy()
-
-METRICS = [root_mean_squared_error, r2_score, mean_absolute_error, huber]
+METRICS = [root_mean_squared_error, r2_score, mean_absolute_error, mean_squared_error]
 
 # === METRICS UTILITIES ===
 def display_metric_scores(metric_dict, start='', round=None):
@@ -552,6 +549,93 @@ def train_agents(models, training_data, test_data, metrics=METRICS, model_out_fo
             results[station][agent]['metric_scores'] = metric_scores
 
     return results
+
+def train_agents_1_per_agent(models, training_data, merged_training_data, test_data, metrics=METRICS, model_out_folder=None, random_state=42, v=1):
+    if model_out_folder:
+        os.makedirs(model_out_folder, exist_ok=True)
+        for filename in os.listdir(model_out_folder):
+            file_path = os.path.join(model_out_folder, filename)
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+
+    results = {station:{agent:{} for agent in agents.keys()} for station, agents in test_data.items()}
+    for agent, model in models.items():
+        if agent in merged_training_data:
+            # train the models on all the stations
+            x_train, y_train = merged_training_data[agent]['x'],merged_training_data[agent]['y']
+            x_test, y_test = None, None
+            model_desc, model_generator, model_params, training_params, uses_sequences = model
+            if v>0: print(f'Predicting {agent} using {model_desc}...')
+            if training_params is None:
+                training_params = {}
+            if uses_sequences:
+                if 'time_steps' not in model_params:
+                    raise KeyError('No `time_steps` key found in the model parameters to compute the sequences')
+                ts = model_params['time_steps']
+                use_mask = model_params.get('use_mask', False)                     
+                seq_x_train =None
+                seq_y_train =None
+                for station in training_data.keys():
+                    if agent in training_data[station].keys():
+                        x_train, y_train = create_sequences(training_data[station][agent]['x'], training_data[station][agent]['y'], ts, use_mask=use_mask)
+                        if seq_x_train is None:
+                            seq_x_train = x_train
+                            seq_y_train = y_train
+                        else:
+                            seq_x_train = np.concatenate((seq_x_train, x_train), axis=0)
+                            seq_y_train = np.concatenate((seq_y_train, y_train), axis=0)
+
+
+            else: # if not using sequences, flatten
+                y_train = y_train.to_numpy().ravel()
+
+            model_instance = model_generator(**model_params)
+            try:
+                tf.keras.backend.clear_session()  
+                set_random_seed(random_state)
+                model_instance.fit(x_train, y_train, **training_params, verbose=0)
+            except TypeError:
+                tf.keras.backend.clear_session()  
+                set_random_seed(random_state)
+                model_instance.fit(x_train, y_train, **training_params)
+
+        # predict per-station
+        for station in test_data:
+            if agent in test_data[station]:
+                if not uses_sequences:
+                    x_test = test_data[station][agent]['x']
+                    y_test = test_data[station][agent]['y']
+                else:
+                    x_test = pd.concat([training_data[station][agent]['x'].iloc[-ts+1:], test_data[station][agent]['x']]) # to also compute the first days we need time_steps more days
+                    x_test, y_test = create_sequences(x_test, test_data[station][agent]['y'], ts, use_mask=False)
+                    
+                try:
+                    predictions = model_instance.predict(x_test, verbose=0)
+                except TypeError:
+                    predictions = model_instance.predict(x_test)
+
+                predictions = pd.DataFrame(predictions, index=y_test.index, columns=['Agent_value'])
+                metric_scores = {}
+                for m in metrics:
+                    name = 'metric'
+                    try:
+                        name = m.__name__
+                    except: 
+                        name = type(m).__name__
+                        pass
+                    score = m(y_test, predictions)
+                    metric_scores[name] = score
+
+
+                if v>1:display_metric_scores(metric_scores,'\t')
+
+                results[station][agent]['predictions'] = predictions
+                results[station][agent]['metric_scores'] = metric_scores
+
+    return results
+
 
 
 # === RESULTS ===
