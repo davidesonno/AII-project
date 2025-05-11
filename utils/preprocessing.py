@@ -216,7 +216,7 @@ def preprocess_traffic_dataset(traffic_folder, locations = None, radius=1, v=1):
             ('VIA CHIARINI','44.499134335170289,11.285089594971216') 
         ]
 
-    if v>0: print('Merging readings files...')
+    if v>0: print('Merging measurements files...')
     df = merge_csv_to_dataframe(os.path.join(traffic_folder, 'readings'), v=v, sep=';')
     if v>0: print('Merging accuracies files...')
     accuracies_df = merge_csv_to_dataframe(os.path.join(traffic_folder, 'accuracies'), v=v, sep=';')
@@ -227,9 +227,9 @@ def preprocess_traffic_dataset(traffic_folder, locations = None, radius=1, v=1):
     accuracies_df = accuracies_df.map(map_values)
     common_cols = df.columns.intersection(accuracies_df.columns).tolist()
 
-    accurate_traffic_df = apply_accuracy_df(df[common_cols],accuracies_df[common_cols],max_multiplier=15, half_multiplier=2).reset_index(drop=True)
+    accurate_traffic_df = apply_accuracy_df(df[common_cols],accuracies_df[common_cols]).reset_index(drop=True)
     df = df.reset_index(drop=True)
-    for col in list(set(df.columns) - set(common_cols)): # add back readings columns
+    for col in list(set(df.columns) - set(common_cols)): # add back measurements columns
         accurate_traffic_df[col] = df[col]
     accurate_traffic_df = accurate_traffic_df.set_index('data')
 

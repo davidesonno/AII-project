@@ -52,7 +52,7 @@ def ecef_distance(lat1, lon1, lat2, lon2):
 
     return np.linalg.norm(p1 - p2, axis=0)  # Element-wise norm
 
-def search_close_readings(df, center, radius, method=ecef_distance):
+def search_close_measurements(df, center, radius, method=ecef_distance):
     center_lat, center_lon = map(float, center.split(','))
     lat_lon = np.array([list(map(float, gp.split(','))) for gp in df['geopoint']])
     distances = method(center_lat, center_lon, lat_lon[:, 0], lat_lon[:, 1])
@@ -62,7 +62,7 @@ def search_close_readings(df, center, radius, method=ecef_distance):
 def divide_df_by_location(df, geopoint, radius, name=None, v=1):
     if v>0: print(f'Location{" "+name if name else ""}: {geopoint}')
     if v>0: print(f' > Filtering close traffic data...')
-    close_df = search_close_readings(df, geopoint, radius)
+    close_df = search_close_measurements(df, geopoint, radius)
     close_df=close_df.drop(columns=['geopoint', 'codice spira'])
     if v>0: print(' > Summing up hour data...')
     df_melted = close_df.reset_index().melt(id_vars=["data"], var_name="Hour", value_name="Traffic_value")

@@ -30,7 +30,6 @@ def resample_df_on_column(df, agents_dict:dict, column='Date', v=1 ):
 
 # === MISSING VALUES FILLING ===
 def fill_missing_dates_with_model(df, settings:dict):
-    # TODO fill this after developing the 'Process' section
     pass
 
 def fill_missing_dates(df: pd.DataFrame, method: str = 'ffill', column=None, model_settings:dict=None):

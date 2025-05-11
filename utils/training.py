@@ -208,7 +208,7 @@ def create_sequences(x_df, y_df, time_steps, use_mask=True, mask_value=-999.0, s
                 try:
                     y_val = y_df.copy().loc[idx] # try to see if y_df has the date
                     # if y_val.shape != (1,1):
-                        # continue # on the dataset some readings arent precisely at midnight...
+                        # continue # on the dataset some measurements arent precisely at midnight...
                                  # so there might be two values per day 
                     y.append(y_val)
                     X.append(seq)
@@ -692,7 +692,7 @@ def extract_model_scores(results, test_sets):
         agent_len = test_lenghts[agent]
         for model in extracted_data[agent]:
             for metric in extracted_data[agent][model]:
-                extracted_data[agent][model][metric] /= agent_len   
+                extracted_data[agent][model][metric] /= agent_len
     
     return extracted_data
 

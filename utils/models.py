@@ -128,12 +128,9 @@ def get_models(n_hour_features, n_daily_features):
     # hour models
     xgbr_params = {'objective': "reg:absoluteerror",'n_estimators': 180,'max_depth': 6,'learning_rate': 0.07,'subsample': 0.9}
     xgbr = ('XGB Regressor', xgb.XGBRegressor, xgbr_params, None, False)
-    lstm_params = {'time_steps': 3,'n_features': n_hour_features,'lstm_units': 128,'optimizer': Adam(learning_rate=1e-3),'loss': 'mean_absolute_error','use_mask': True}
-    lstm_train_params = {'epochs': 20,'batch_size': 64}
-    lstm = ('LSTM-masked', build_lstm_model, lstm_params, lstm_train_params, True)
-    bn_ffnn2_params = {'input_size': n_hour_features,'neurons': [512, 256, 128],'batch_norm': True,'dropout': 0.3,'optimizer': Adam(learning_rate=1e-2),'loss': 'mean_absolute_error'}
-    bn_ffnn2_train_params = {'epochs':10,'batch_size':32,}
-    FFNN2_BN = ('Feed Forward NN 2', build_ffnn_model, bn_ffnn2_params, bn_ffnn2_train_params, False)
+    ffnn2_params = {'input_size': n_hour_features,'neurons': [512, 256, 128],'dropout': 0.3,'optimizer': Adam(learning_rate=1e-2),'loss': 'mean_absolute_error'}
+    ffnn2_train_params = {'epochs':10,'batch_size':32,}
+    FFNN2 = ('Feed Forward NN 2', build_ffnn_model, ffnn2_params, ffnn2_train_params, False)
     conv_params = {'time_steps': 8,'n_features': n_hour_features,'filters': 64,'optimizer': Adam(learning_rate=3e-3),'loss': 'mean_absolute_error'}
     conv_train_params = {'epochs': 10,'batch_size': 64}
     conv = ('Conv1D', build_conv_model, conv_params, conv_train_params, True)
@@ -149,27 +146,27 @@ def get_models(n_hour_features, n_daily_features):
     FFNN_daily = ('Feed Forward NN', build_ffnn_model, ffnn_daily_params, ffnn_daily_train_params, False)
     bn_ffnn_daily_params = {'input_size': n_daily_features,'neurons': [1024, 512, 256, 128],'batch_norm': True,'dropout': 0.2,'optimizer': Adam(learning_rate=3e-4),'loss': 'mean_absolute_error'}
     bn_ffnn_daily_train_params = {'epochs':20,'batch_size':32,}
-    FFNN_daily_BN = ('Feed Forward NN BatchNorm', build_ffnn_model, bn_ffnn_daily_params, bn_ffnn_daily_train_params, False)
-    rfr2_params = {'n_estimators':150,'max_depth':20,'min_samples_leaf': 5,'max_features': 'log2'}
-    rfr2 = ('Random Forest Regressor 2', RandomForestRegressor, rfr2_params, None, False)
+    FFNN_BN_daily = ('Feed Forward NN BatchNorm', build_ffnn_model, bn_ffnn_daily_params, bn_ffnn_daily_train_params, False)
+    rfr_params = {'n_estimators':100,'max_depth':10,'min_samples_leaf': 5,'max_features': 'log2',}
+    rfr = ('Random Forest Regressor 2', RandomForestRegressor, rfr_params, None, False)
     models = {
         'GIARDINI MARGHERITA':{
             'NO2': conv2, 
             'O3': conv3,
-            'PM10': rfr2,
+            'PM10': FFNN_BN_daily,
             'PM2.5': FFNN_daily 
         },
         'PORTA SAN FELICE':{
-            'C6H6': conv, 
+            'C6H6': conv2, 
             'CO': xgbr, 
-            'NO2': lstm,
-            'PM10':FFNN_daily_BN,  
-            'PM2.5':FFNN_daily_BN 
+            'NO2': FFNN2,
+            'PM10':FFNN_daily,  
+            'PM2.5':FFNN_daily 
         },
         'VIA CHIARINI':{
-            'NO2': FFNN2_BN, 
-            'O3': conv2, 
-            'PM10':rfr2  
+            'NO2': xgbr, 
+            'O3': conv, 
+            'PM10':rfr 
         }
     }
     return models

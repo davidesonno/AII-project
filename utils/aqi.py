@@ -44,7 +44,7 @@ limits = {
 }
 
 
-def compute_PM(value, agent):
+def compute_breakpoints_AQI(value, agent):
     if value > 0:
         try:
             conc_lo = max([x for x in CONC[agent]['LO'] if x <= value])
@@ -74,7 +74,7 @@ def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoin
         if agent in ('PM2.5', 'PM10'):
             if include_hourly_pm:
                 if breakpoints:
-                    aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
+                    aqi['AQI'] = aqi[value_column].apply(lambda x: compute_breakpoints_AQI(x, agent))
                 else: 
                     aqi['AQI'] = aqi[value_column] / limit * 100
                 
@@ -84,7 +84,7 @@ def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoin
             else:
                 aqi = pd.DataFrame()
         elif agent == 'O3' and breakpoints:
-            aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
+            aqi['AQI'] = aqi[value_column].apply(lambda x: compute_breakpoints_AQI(x, agent))
             aqi = aqi.drop(columns=[value_column])
         else:
             aqi['AQI'] = aqi[value_column] / limit * 100
@@ -94,7 +94,7 @@ def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoin
         if agent in ('PM2.5', 'PM10'):
             if include_hourly_pm:
                 if breakpoints:
-                    aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
+                    aqi['AQI'] = aqi[value_column].apply(lambda x: compute_breakpoints_AQI(x, agent))
                 else: 
                     aqi['AQI'] = aqi[value_column] / limit * 100
                 
@@ -103,13 +103,10 @@ def get_AQI(df: pd.DataFrame, agent, period, value_column, limit=None, breakpoin
         # Average agents
         if agent in ('NO2', 'C6H6'):
             aqi = aqi.resample('D').mean()
-            if agent == 'O3' and breakpoints: # TODO eventually move it boelow
-                aqi['AQI'] = aqi[value_column].apply(lambda x: compute_PM(x, agent))
-            else:
-                aqi['AQI'] = aqi[value_column] / limit * 100
+            aqi['AQI'] = aqi[value_column] / limit * 100
             aqi = aqi.drop(columns=[value_column])
 
-        # MaSsImA dElLe MeDiE mObIlI sU 8 oRe
+        # maximum rolling average on 8 hours
         if agent in ('O3','CO'):
             aqi = aqi.resample('1h').max()
 

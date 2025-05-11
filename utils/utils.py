@@ -61,25 +61,24 @@ def convert_percentage_to_number(df):
             df[col] = df[col].str.rstrip('%').astype(float) / 100
     return df
 
-def apply_accuracy_df(readings_df, accuracies_df, add_verified_col=False, max_multiplier=100, half_multiplier=2):
+def apply_accuracy_df(measurements_df, accuracies_df, add_verified_col=False):
 
-    def accuracy_coeff(accuracies:pd.Series, max, half):
-        #TODO
+    def accuracy_coeff(accuracies:pd.Series):
         return accuracies.where(accuracies == 0, 1 / accuracies)
 
-    merged_df = readings_df.merge(accuracies_df, on=['data', 'codice spira'], 
+    merged_df = measurements_df.merge(accuracies_df, on=['data', 'codice spira'], 
                                   suffixes=('_reading', '_accuracy'), how='left').fillna(1)
 
     if add_verified_col:
-        merged_df['accurate'] = merged_df.iloc[:, 2 + len(readings_df.columns[2:]) :].notna().all(axis=1)
+        merged_df['accurate'] = merged_df.iloc[:, 2 + len(measurements_df.columns[2:]) :].notna().all(axis=1)
 
     # Multiply only where accuracy is available, keeping original value if missing
-    for col in readings_df.columns[2:]:  # Skip 'data' and 'codice spira'
-        merged_df[col + '_reading'] = (merged_df[col + '_reading']  * accuracy_coeff(merged_df[col + '_accuracy'], max_multiplier, half_multiplier)).astype(int)
+    for col in measurements_df.columns[2:]:  # Skip 'data' and 'codice spira'
+        merged_df[col + '_reading'] = (merged_df[col + '_reading']  * accuracy_coeff(merged_df[col + '_accuracy'])).astype(int)
 
     cols = ['data', 'codice spira', 'accurate'] if add_verified_col else ['data', 'codice spira']
-    final_df = merged_df[cols + [col + '_reading' for col in readings_df.columns[2:]]]
-    final_df.columns = cols + list(readings_df.columns[2:])  # Rename columns back
+    final_df = merged_df[cols + [col + '_reading' for col in measurements_df.columns[2:]]]
+    final_df.columns = cols + list(measurements_df.columns[2:])  # Rename columns back
 
     return final_df
 
@@ -88,7 +87,6 @@ def normalize_columns(df:pd.DataFrame, columns:list=[], skip:list=[], return_dis
 	Applies `scaler` to the specified columns, skipping `skip` columns.
     
     If no skip columns are specified, all the columns are attempted to be scaled.
-
     If columns appear in `return_dist`, a dict with their mean and std will be returned.
     '''
     if not columns:
