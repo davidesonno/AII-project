@@ -2,8 +2,24 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os
 import numpy as np
+import tensorflow as tf
+import xgboost as xgb
+import shap
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.inspection import permutation_importance
+from sklearn.metrics import mean_absolute_error
+from sklearn.ensemble import RandomForestRegressor
 from datetime import datetime
+from .training import create_sequences
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+import warnings
+# shap raises this warning
+warnings.filterwarnings(
+    "ignore",
+    message="`tf.keras.backend.set_learning_phase` is deprecated",
+    category=UserWarning,
+    module="keras.backend"
+)
 
 # === FILE READING ==
 def merge_csv_to_dataframe(input_folder, v=1, **kwargs):
@@ -121,7 +137,279 @@ def extract_ordered_features_by_shap(nested_data, data):
 
     return result
 
+# === FEATURE IMPORTANCE ===
+def neg_mae_scorer(model, X, y):
+    try:
+        y_pred = model.predict(X, verbose=0)
+    except: # sklearn doesnt have `verbose`
+        y_pred = model.predict(X)
+    return -mean_absolute_error(y, y_pred)
+
+def lstm_neg_mae_scorer(model, x, y, time_steps, n_features):
+    x = x.reshape(-1, time_steps, n_features) # since that this is getting used by permutation_importance, it gets 2d data as input and needs to be reshaped
+    y_pred = model.predict(x, verbose=0)
+    return -mean_absolute_error(y, y_pred)
+ 
+def compute_permutation_importances(models, test_sets, n_samples, n_repeats): 
+    permutation_importances = {}
+    for station in models:
+        if station not in permutation_importances:   
+            permutation_importances[station] = {}
+        for agent in models[station].keys():
+            model = models[station][agent]
+            X_test = test_sets[station][agent]['x']
+            y_test = test_sets[station][agent]['y']
+            importances = {}
+            scoring = neg_mae_scorer
+            seqs = False
+            input_shape=None
+
+            if isinstance(model, tf.keras.models.Sequential):
+                input_shape = model.input_shape
+                
+                if len(input_shape) == 2: #ffnn
+                    pass
+                    
+                if len(input_shape) == 3: # seqs or cnn
+                    seqs = True
+                    time_steps = input_shape[1] 
+                    n_features = input_shape[2] 
+                    use_mask = isinstance(model.layers[0], tf.keras.layers.Masking)
+                    X_test, y_test = create_sequences(test_sets[station][agent]['x'], test_sets[station][agent]['y'], time_steps, use_mask=use_mask)
+                    y_test = y_test.to_numpy()
+                    test_data_idx = np.random.choice(X_test.shape[0], size=n_samples, replace=False)
+                    X_test = X_test[test_data_idx]
+                    y_test = y_test[test_data_idx]
+                    X_test = X_test.reshape(X_test.shape[0], -1) # permutation_importance does not allow for 3d data
+
+                    scoring = lambda model, x, y: lstm_neg_mae_scorer(model, x, y, time_steps, n_features) # lambda because we had to pass time steps and num. features    
+                
+            else: # other models
+                X_test = X_test.sample(n_samples, random_state=42)
+                y_test = y_test.sample(n_samples, random_state=42)
+
+            # print(f'Computing importance for {station} {agent}')
+
+            # compute importances
+            importances_result = permutation_importance(model,
+                                                        X_test,
+                                                        y_test,
+                                                        scoring=scoring,
+                                                        n_repeats=n_repeats,
+                                                        random_state=42)
+            
+            for key in ('importances_mean', 'importances_std'): # we don't care about the full repetitions values (`importances`)
+                val = importances_result[key]
+                if seqs: # for the seqs we had to flatten the sequences, now we have one ts*n_feat. total features, so we go back to the original shape averaging
+                    val = val.reshape(input_shape[1], input_shape[2])
+                    val = val.mean(axis=0)
+                importances[key] = val
+
+            # save the importances
+            permutation_importances[station][agent] = importances
+
+    return permutation_importances
+
+def compute_shap_values(models, train_sets, test_sets, n_samples, plot=False, stations=None, agents=None, figsize=None):
+    '''
+	Uses shap.KernelExplainer for deep models and shap.TreeExplainer for tree models.
+    '''
+    def model_predict(data): # used in kernel explainers
+        return model.predict(data,verbose=0).reshape(-1) # with no reshaping it does not work
+    
+    n_rows = len(agents)
+    n_cols = len(stations)
+    if figsize is None:
+        figsize = (n_cols * 5, n_rows * 6.5)
+    if plot:
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    
+    results_shap_values = {}
+    for station in models:
+        if station not in results_shap_values:   
+            results_shap_values[station] = {}
+        for agent in models[station].keys():
+            model = models[station][agent]
+            if isinstance(model, tf.keras.models.Sequential):
+                training_data = None
+                test_data = None
+                shap_values = None
+                input_shape = model.input_shape
+
+                if len(input_shape) == 2: # ffnn
+                    training_data = train_sets[station][agent]['x'].sample(n_samples, random_state=42)
+                    test_data = test_sets[station][agent]['x'].sample(n_samples, random_state=42)
+                    
+                    # kernel (has to predict and becomes so slow with many samples)
+                    # explainer = shap.KernelExplainer(model_predict, training_data)
+                    # shap_values = explainer.shap_values(test_data)
+
+                    # gradient
+                    explainer = shap.GradientExplainer(model, training_data)
+                    shap_values = explainer.shap_values(np.array(test_data))
+                    shap_values = shap_values.squeeze()
+
+                if len(input_shape) == 3: # lstm or cnn
+                    time_steps = input_shape[1] 
+                    use_mask = isinstance(model.layers[0], tf.keras.layers.Masking)
+                    training_data, _ = create_sequences(train_sets[station][agent]['x'], train_sets[station][agent]['y'], time_steps, use_mask=use_mask)
+                    test_data, _ = create_sequences(test_sets[station][agent]['x'], test_sets[station][agent]['y'], time_steps, use_mask=use_mask)
+                    # training_data, _ = create_sequences(train_sets[station][agent]['x'].iloc[:3*n_samples], train_sets[station][agent]['y'].iloc[:3*n_samples], time_steps, use_mask=use_mask)
+                    # test_data, _ = create_sequences(test_sets[station][agent]['x'].iloc[:3*n_samples], test_sets[station][agent]['y'].iloc[:3*n_samples], time_steps, use_mask=use_mask)
+                    
+                    # if you sample before creating the sequences you would separate consecutive values. We might want to sample groups of time_steps elements
+                    # and then create sequences with no sliding window. Or simply shrinken the dataset before, you need num_samples + time_steps -1 hours in total,
+                    # so maybe keep 2/3 times num_samples before creating sequences <-- currenty doing this (missing the first `times_steps` -1 elements)
+                    training_data_idx = np.random.choice(training_data.shape[0], size=n_samples, replace=False)
+                    test_data_idx = np.random.choice(test_data.shape[0], size=n_samples, replace=False)
+                    training_data = training_data[training_data_idx]
+                    test_data = test_data[test_data_idx]
+
+                    # gradient
+                    explainer = shap.GradientExplainer(model, training_data)
+                    shap_values = explainer.shap_values(test_data)
+                    shap_values = np.mean(np.squeeze(shap_values), axis=1)
+                    test_data = pd.DataFrame(test_data.mean(axis=1), columns=test_sets[station][agent]['x'].columns)
+
+                    # kernel (might work if passed time averaged data)
+                    # explainer = shap.KernelExplainer(model_predict, training_data)
+                    # shap_values = explainer.shap_values(test_data.reshape(test_data.shape[0], -1))
+                    # shap_values = explainer.shap_values(test_data)
+
+            elif isinstance(model, (RandomForestRegressor, xgb.XGBRegressor)):
+                explainer = shap.TreeExplainer(model)
+                test_data = test_sets[station][agent]['x'].sample(n_samples, random_state=42)
+                shap_values = explainer.shap_values(test_data)
+
+            # elif isinstance(model, (xgb.XGBRegressor,)):
+            #     training_data = shap.sample(train_sets[station][agent]['x'], n_samples, random_state=42)
+            #     test_data = test_sets[station][agent]['x'].sample(n_samples, random_state=42)
+                
+            #     f = lambda x: model.predict(x)
+            #     explainer = shap.KernelExplainer(f, training_data, link='logit')
+            #     shap_values = explainer.shap_values(test_data)
+
+            # remove outliers (removes everything when the model is a xgboost)
+            # z_scores = np.abs((shap_values - shap_values.mean(axis=0)) / shap_values.std(axis=0))
+            # shap_values = shap_values[(z_scores < 3).all(axis=1)]
+            # test_data = test_data[(z_scores < 3).all(axis=1)]
+            
+            # save the shap values
+            results_shap_values[station][agent] = {
+                'shap_values': shap_values,
+                'explainer':  explainer
+            }
+
+            if plot:
+                ax = axes[agents.index(agent)][stations.index(station)]
+                tmp_fig, tmp_ax = plt.subplots(figsize=(5, 4))
+                shap.summary_plot(shap_values,
+                                test_data,
+                                max_display=999,
+                                show=False,
+                                color_bar=True,
+                                rng=42
+                                )
+                canvas = FigureCanvas(tmp_fig)
+                canvas.draw()
+
+                # Convert canvas to image
+                image = np.frombuffer(canvas.buffer_rgba(), dtype='uint8')
+                image = image.reshape(tmp_fig.canvas.get_width_height()[::-1] + (4,))
+
+                # Show the image on the target subplot
+                ax.imshow(image)
+                ax.axis('off')
+                ax.set_title(f'SHAP summary for {agent} at {station}')
+
+                plt.close(tmp_fig)
+
+    if plot:
+        for station in stations:
+            for agent in agents:
+                if agent not in models[station]:
+                    axes[agents.index(agent)][stations.index(station)].axis('off') # remove unused subplots
+        plt.tight_layout()
+        plt.show()
+
+    return results_shap_values
+
+
 # === PLOTS ===
+def plot_permutation_importances(permutation_importances, stations, agents, test_sets, figsize=None):
+    n_rows = len(agents)
+    n_cols = len(stations)
+    if figsize is None:
+        figsize = (n_cols * 5, n_rows * 6.5)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+
+    for station in permutation_importances:
+        for agent in permutation_importances[station]:
+            X_test = test_sets[station][agent]['x']
+            features = X_test.columns
+            importances = permutation_importances[station][agent]
+            ax = axes[agents.index(agent)][stations.index(station)]
+            ax.barh(features, importances['importances_mean'], height=0.7, xerr=importances['importances_std'])
+            ax.set_title(f'Permutation Importance for {agent} at {station}')
+            ax.grid(linestyle=':')
+
+    for station in stations:
+        for agent in agents:
+            if agent not in permutation_importances[station]:
+                axes[agents.index(agent)][stations.index(station)].axis('off') # remove unused subplots
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_shap_values(plot_type, shap_values, stations, agents, test_sets, figsize=None):
+    n_rows = len(agents)
+    n_cols = len(stations)
+    if figsize is None:
+        figsize = (n_cols * 10, n_rows * 7)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+
+    for station in stations:
+        for agent in shap_values[station]:
+            explanation = shap.Explanation(
+                values=shap_values[station][agent]['shap_values'],
+                data=test_sets[station][agent]['x'],
+                feature_names=test_sets[station][agent]['x'].columns.tolist()
+            )
+
+            kwargs = {}
+            
+            if plot_type == shap.plots.heatmap:
+                kwargs = {
+                    'feature_values': explanation.abs.max(0), 
+                    'plot_width': 10,
+                }
+            if plot_type == shap.plots.bar:
+                clustering = shap.utils.hclust(test_sets[station][agent]['x'], test_sets[station][agent]['y'])
+                kwargs = {
+                    'clustering' :clustering, 
+                    'clustering_cutoff' :0.5,
+                }
+
+            # Draw to canvas and convert to image
+            ax = axes[agents.index(agent)][stations.index(station)]
+            plot_type(
+                shap_values=explanation,
+                **kwargs,
+                max_display=40,
+                show=False,
+                ax=ax
+            )
+            ax.set_title(f"{agent} @ {station}", fontsize=15)
+
+    for station in stations:
+        for agent in agents:
+            if agent not in shap_values[station]:
+                axes[agents.index(agent)][stations.index(station)].axis('off') # remove unused subplots
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_time_series(dfs, value_column, date_column, legends, start_date=None, end_date=None, max_rows=5000, downsample_factor=8, title=''):
     plt.figure(figsize=(40, 6))
 

@@ -300,6 +300,7 @@ def compute_AQI_and_show_analysis(predictions_dict, true_values_dict, categories
     for station in true_AQI_hourly:
         AQI_diff_daily[station] = AQI_difference(pred_AQI_daily[station], true_AQI_daily[station])
         AQI_diff_hourly[station] = AQI_difference(pred_AQI_hourly[station], true_AQI_hourly[station])
+    print('HOURLY MODELS')
     for station in pred_AQI_hourly:
         print('=============================================')
         print(f'Station {station} Hourly')
@@ -308,6 +309,10 @@ def compute_AQI_and_show_analysis(predictions_dict, true_values_dict, categories
         print('---------------------------------------------')
         print_AQI_difference_metrics(AQI_diff_hourly[station])
         print('=============================================')
+    print()
+    print()
+    print()
+    print('DAILY MODELS')
     for station in pred_AQI_daily:
         print('=============================================')
         print(f'Station {station} Daily')
