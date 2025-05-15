@@ -1,14 +1,15 @@
 # Artificial Intelligence in Industry - project
+This repository contains the code for the *Artificial Intelligence in Industry* exam project.
 
-The aim of the project is to estimate air quality index according to the traffic and weather conditions. To do so, data from Bologna, Italy, have been used to train and test the models.
+## Project overview
+Air pollution is a critical environmental and public health issue in urban areas. The aim of this project is to predict AQI values for several key pollutants by analyzing local traffic density and weather conditions. 
+To achieve this, we utilized data collected from Bologna, Italy, to train and evaluate various machine learning and deep learning models.
 
 ## Datasets
+We constructed a **custom dataset** by combining three publicly available sources: air pollution measurements, traffic data, and weather information.
 
 ### Air pollution
-
-* [Dataset](https://opendata.comune.bologna.it/explore/dataset/dati-centraline-bologna-storico/table/?sort=data_inizio&disjunctive.agente)
-
-Readings from three stations in Bologna. Each station collects a bunch of measurements, in particular:
+This dataset contains historical air quality measurements from three monitoring stations in Bologna. These stations measure a set of pollutants on a daily or hourly basis. The following pollutants are included:
 
 * **NO2 (NITROGEN DIOXIDE)**
 * **O3 (OZONE)**
@@ -19,32 +20,84 @@ Readings from three stations in Bologna. Each station collects a bunch of measur
 * **PM10**
 * **PM2.5**
 
-The measurement for a specific hour and a specific agent might be missing. Also, *PM10* and *PM2.5* are daily measures.
+These pollutants are directly tied to both traffic emissions and atmospheric conditions, making them ideal targets for prediction.
+
+* [Source](https://opendata.comune.bologna.it/explore/dataset/dati-centraline-bologna-storico/table/?sort=data_inizio&disjunctive.agente)
 
 ### Traffic
+Traffic data is taken from a network of  coils embedded in city roads. These coils detect when a vehicle passes over them, allowing estimation of traffic volume in different zones of Bologna.
 
-* [Coil Traffic readings](https://opendata.comune.bologna.it/explore/dataset/rilevazione-flusso-veicoli-tramite-spire-anno-2024/table/?disjunctive.codice_spira&disjunctive.tipologia&disjunctive.nome_via&disjunctive.stato&sort=data)
-* [Coil accuracy](https://opendata.comune.bologna.it/explore/dataset/accuratezza-spire-anno-2024/information/?disjunctive.codice_spira_2)
-
-Traffic data is measured used some specific coild that can detect if a veichle is passing over it. There are many gates around the city that collects this information. The dataset page suggests to also consider the coil accuracy dataset, used to check if the readings are correct.
-
+* [Source (Coil Traffic)](https://opendata.comune.bologna.it/explore/dataset/rilevazione-flusso-veicoli-tramite-spire-anno-2024/table/?disjunctive.codice_spira&disjunctive.tipologia&disjunctive.nome_via&disjunctive.stato&sort=data)
+* [Source (Coil Accuracy)](https://opendata.comune.bologna.it/explore/dataset/accuratezza-spire-anno-2024/information/?disjunctive.codice_spira_2)
 ### Weather
 
-* [Temperature and precipitations](https://dati.arpae.it/dataset/erg5-interpolazione-su-griglia-di-dati-meteo)
 
-The dataset containd the following informations:
+The dataset contains the following informations:
 
-* **TAVG:** Average Temperature
-* **PREC:** Precipitations
-* **RHAVG:**
-* **RAD:**
-* **W_SCAL_INT:**
-* **W_VEC_DIR:**
-* **W_VEC_INT:**
-* **LEAFW:**
-* **ET0:**
+* **TAVG**: Daily average temperature 
+* **PREC**: Total precipitation 
+* **RHAVG**: Average relative humidity 
+* **RAD**: Solar radiation 
+* **W_SCAL_INT**: Wind intensity 
+* **W_VEC_DIR**: Wind direction 
+* **W_VEC_INT**: Wind speed 
+* **LEAFW**: Leaf wetness
+* **ET0**: Evapotranspiration
 
-### Direct Downloads:
+* [Source](https://dati.arpae.it/dataset/erg5-interpolazione-su-griglia-di-dati-meteo)
+
+## Project structure
+The project is organized using jupyter notebooks, each representing a step in the workflow. Below is an overview of each notebook:
+### Notebook 0 – Dataset Download
+The very first notebook contains utility to automatically download the datasets for the firts time.
+
+### Notebooks 1–3 – Preprocessing
+Each of these notebooks focuses on cleaning, aligning, and engineering features from one of the datasets (pollution, traffic, weather). Preprocessing includes:
+* Time-based interpolation.
+* Geospatial filtering and joining (when required).
+
+### Notebook 4 – Dataset Merging
+* Merges the cleaned versions of the three datasets into a single, coherent dataframe.
+* Ensures temporal alignment and performs Normalization and transformation of variables.
+* Outputs a final dataset ready for model training.
+
+### Notebook 5 – Modeling and Initial Results
+* Compares multiple ML/DL techniques including:
+  * Random Forest
+  * Gradient Boosting
+  * LSTM/convultional models for temporal modeling
+* Evaluates the models using standard regression metrics (RMSE, MAE, R2 score).
+
+Exmaple of one evaluation: 
+![alt text](imgs/5.png)
+
+### Notebook 6 – AQI Calculation and Evaluation
+* Converts pollutant concentration predictions into **AQI levels** based on official thresholds
+![alt text](imgs/6-1.png)
+
+* Evaluates the performance of models on **AQI classification**
+![alt text](imgs/6.png)
+
+### Notebook 7 – Explainability
+* Applies **SHAP** and **Permutation Importance** to analyze feature importance and model interpretability.
+* Visualizes the most influential variables in the prediction process for each pollutant.
+
+![alt text](imgs/7.png)
+
+### Notebook 8 – Multi-Task Learning
+* Develop and tests a multi-task learning neural network, where each output head predicts one pollutant.
+* Investigates whether a shared model architecture can maintain high performance while reducing complexity and training cost.
+
+## Code Organization
+
+To improve maintainability and avoid extremely long notebooks, many functions, transformations, and model definitions have been refactored into the `utils/` folder. This includes:
+
+* Data cleaning utilities
+* Feature engineering pipelines
+* Model trainers and evaluators
+* Visualization functions
+
+**Datasets Download**:
 
 * [Air pollution](https://opendata.comune.bologna.it/api/explore/v2.1/catalog/datasets/dati-centraline-bologna-storico/exports/csv?lang=it&qv1=(data_inizio%3A%5B2018-12-31T23%3A00%3A00Z%20TO%202024-12-31T22%3A59%3A59Z%5D)&timezone=Europe%2FRome&use_labels=true&delimiter=%3B) 2019-2024 (47 MB)
 * **Traffic:**
